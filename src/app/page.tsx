@@ -1,9 +1,43 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import Link from 'next/link';
 import { ArrowRight, ImageIcon, VideoIcon } from 'lucide-react';
 
-export default function Home() {
+export default function HomePage() {
+  const router = useRouter();
+  const supabase = createClientComponentClient();
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const checkSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (session) {
+        router.push("/dashboard");
+      } else {
+        setIsLoading(false);
+      }
+    };
+
+    checkSession();
+  }, [router, supabase.auth]);
+
+  if (isLoading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <div className="text-center">
+          <h2 className="text-2xl font-bold">読み込み中...</h2>
+          <p className="mt-2 text-gray-600">しばらくお待ちください</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="mx-auto max-w-5xl flex flex-col items-center space-y-12">
       <div className="space-y-6 text-center">
