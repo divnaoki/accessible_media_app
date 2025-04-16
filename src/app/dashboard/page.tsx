@@ -33,20 +33,6 @@ export default function DashboardPage() {
   const router = useRouter();
   const supabase = createClientComponentClient();
 
-  useEffect(() => {
-    const checkSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        router.push("/auth/login");
-      } else {
-        setLoading(false);
-        fetchCategories();
-      }
-    };
-
-    checkSession();
-  }, [router, supabase.auth]);
-
   const fetchCategories = async () => {
     try {
       const { data, error } = await supabase
@@ -61,6 +47,24 @@ export default function DashboardPage() {
       console.error("Error fetching categories:", error);
       setError("カテゴリーの取得に失敗しました");
     }
+  };
+
+  useEffect(() => {
+    const checkSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        router.push("/auth/login");
+      } else {
+        setLoading(false);
+        fetchCategories();
+      }
+    };
+
+    checkSession();
+  }, [router, supabase.auth]);
+
+  const handleCategoryCreated = () => {
+    fetchCategories();
   };
 
   if (loading) {
@@ -124,7 +128,7 @@ export default function DashboardPage() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <CreateCategory />
+              <CreateCategory onCategoryCreated={handleCategoryCreated} />
             </CardContent>
           </Card>
         </div>

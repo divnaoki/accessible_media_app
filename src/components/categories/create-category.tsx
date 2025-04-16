@@ -18,7 +18,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { FolderPlus, Plus } from "lucide-react";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 
-export function CreateCategory() {
+interface CreateCategoryProps {
+  onCategoryCreated?: () => void;
+}
+
+export function CreateCategory({ onCategoryCreated }: CreateCategoryProps) {
   const [open, setOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -53,6 +57,11 @@ export function CreateCategory() {
 
       setOpen(false);
       router.refresh();
+
+      // 親コンポーネントに通知
+      if (onCategoryCreated) {
+        onCategoryCreated();
+      }
     } catch (error) {
       console.error("Error creating category:", error);
       setError(
