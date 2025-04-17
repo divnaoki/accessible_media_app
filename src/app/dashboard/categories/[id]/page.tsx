@@ -20,7 +20,7 @@ import { Label } from '@/components/ui/label';
 import { ImageIcon, Upload, Volume2 } from 'lucide-react';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import Image from 'next/image';
-import { useRouter } from 'next/navigation';
+import { useRouter, useParams } from 'next/navigation';
 
 // グローバルな型定義を追加
 declare global {
@@ -43,16 +43,18 @@ type Category = {
 // 画像の型定義
 type Image = {
   id: string;
-  url: string;
+  user_id: string;
+  category_id: string;
   title: string;
+  url: string;
+  file_name: string;
+  file_size: number;
+  mime_type: string;
   created_at: string;
+  updated_at: string;
 };
 
-export default function CategoryDetailPage({
-  params,
-}: {
-  params: { id: string };
-}) {
+export default function CategoryDetailPage() {
   const [category, setCategory] = useState<Category | null>(null);
   const [images, setImages] = useState<Image[]>([]);
   const [isUploading, setIsUploading] = useState(false);
@@ -60,11 +62,16 @@ export default function CategoryDetailPage({
   const [error, setError] = useState<string | null>(null);
   const [selectedImage, setSelectedImage] = useState<Image | null>(null);
   const router = useRouter();
+  const params = useParams();
   const supabase = createClientComponentClient();
 
   useEffect(() => {
     const fetchCategoryData = async () => {
       try {
+        if (!params?.id) {
+          throw new Error('カテゴリーIDが指定されていません');
+        }
+
         // カテゴリー情報の取得
         const { data: categoryData, error: categoryError } = await supabase
           .from('categories')
@@ -75,28 +82,15 @@ export default function CategoryDetailPage({
         if (categoryError) throw categoryError;
         setCategory(categoryData);
 
-        // TODO: 画像データの取得（Supabase Storage APIを使用）
-        // 現在はテストデータを使用
-        setImages([
-          {
-            id: '1',
-            url: 'https://images.unsplash.com/photo-1506744038136-46273834b3fb',
-            title: '山の風景',
-            created_at: '2024-04-15T13:44:07Z',
-          },
-          {
-            id: '2',
-            url: 'https://images.unsplash.com/photo-1511884642898-4c92249e20b6',
-            title: '海の風景',
-            created_at: '2024-04-15T13:44:07Z',
-          },
-          {
-            id: '3',
-            url: 'https://images.unsplash.com/photo-1502082553048-f009c37129b9',
-            title: '森の風景',
-            created_at: '2024-04-15T13:44:07Z',
-          },
-        ]);
+        // 画像データの取得
+        const { data: imagesData, error: imagesError } = await supabase
+          .from('images')
+          .select('*')
+          .eq('category_id', params.id)
+          .order('created_at', { ascending: false });
+
+        if (imagesError) throw imagesError;
+        setImages(imagesData || []);
 
       } catch (error) {
         console.error('Error fetching category data:', error);
@@ -107,14 +101,21 @@ export default function CategoryDetailPage({
     };
 
     fetchCategoryData();
-  }, [params.id, supabase]);
+  }, [params, supabase]);
 
   const handleUpload = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setIsUploading(true);
+    setError(null);
+
+    const form = e.currentTarget;
 
     try {
-      const formData = new FormData(e.currentTarget);
+      if (!params?.id) {
+        throw new Error('カテゴリーIDが指定されていません');
+      }
+
+      const formData = new FormData(form);
       const file = formData.get('image') as File;
       const title = formData.get('title') as string;
 
@@ -122,12 +123,91 @@ export default function CategoryDetailPage({
         throw new Error('ファイルが選択されていません');
       }
 
-      // TODO: Supabase Storage APIを使用した画像アップロード処理を実装
-      console.log('画像アップロード:', { file, title });
+      // ファイルサイズのチェック（10MBまで）
+      if (file.size > 10 * 1024 * 1024) {
+        throw new Error('ファイルサイズは10MB以下にしてください');
+      }
+
+      // ファイルタイプのチェック
+      if (!file.type.startsWith('image/')) {
+        throw new Error('画像ファイルを選択してください');
+      }
+
+      // 現在のユーザーIDを取得
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        throw new Error('ユーザーが認証されていません');
+      }
+
+      // ファイル名を生成（ユーザーID_タイムスタンプ_元のファイル名）
+      const timestamp = new Date().getTime();
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${user.id}_${timestamp}.${fileExt}`;
+
+      // Supabase Storageにアップロード
+      const { data: uploadData, error: uploadError } = await supabase
+        .storage
+        .from('images')
+        .upload(fileName, file, {
+          cacheControl: '3600',
+          upsert: false
+        });
+
+      if (uploadError) {
+        console.error('ストレージアップロードエラー:', uploadError);
+        throw new Error(`ストレージへのアップロードに失敗しました: ${uploadError.message}`);
+      }
+
+      // アップロードした画像のURLを取得
+      const { data: { publicUrl } } = supabase
+        .storage
+        .from('images')
+        .getPublicUrl(fileName);
+
+      // 画像情報をデータベースに保存
+      const { error: insertError } = await supabase
+        .from('images')
+        .insert({
+          user_id: user.id,
+          category_id: params.id,
+          title: title,
+          url: publicUrl,
+          file_name: fileName,
+          file_size: file.size,
+          mime_type: file.type
+        });
+
+      if (insertError) {
+        console.error('データベース挿入エラー:', insertError);
+        throw new Error(`データベースへの保存に失敗しました: ${insertError.message}`);
+      }
+
+      // フォームをリセット
+      if (form) {
+        form.reset();
+      }
+
+      // 画像一覧を更新
+      const { data: imagesData, error: imagesError } = await supabase
+        .from('images')
+        .select('*')
+        .eq('category_id', params.id)
+        .order('created_at', { ascending: false });
+
+      if (imagesError) {
+        console.error('画像一覧取得エラー:', imagesError);
+        throw new Error(`画像一覧の更新に失敗しました: ${imagesError.message}`);
+      }
+
+      setImages(imagesData || []);
 
     } catch (error) {
       console.error('アップロードエラー:', error);
-      setError('画像のアップロードに失敗しました');
+      if (error instanceof Error) {
+        setError(error.message);
+      } else {
+        setError('画像のアップロードに失敗しました。詳細なエラー情報を確認してください。');
+      }
     } finally {
       setIsUploading(false);
     }
@@ -295,30 +375,36 @@ export default function CategoryDetailPage({
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {images.map((image) => (
-                  <div
-                    key={image.id}
-                    className="group relative aspect-square overflow-hidden rounded-lg border bg-muted cursor-pointer"
-                    onClick={() => handleImageClick(image)}
-                  >
-                    <Image
-                      src={image.url}
-                      alt={image.title}
-                      fill
-                      className="object-cover transition-transform group-hover:scale-105"
-                    />
-                    <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/60 to-transparent p-4">
-                      <p className="text-sm font-medium text-white">
-                        {image.title}
-                      </p>
-                      <p className="text-xs text-white/80">
-                        {new Date(image.created_at).toLocaleDateString('ja-JP')}
-                      </p>
+              {images.length === 0 ? (
+                <div className="text-center py-8">
+                  <p className="text-muted-foreground">このカテゴリーにはまだ画像がありません</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {images.map((image) => (
+                    <div
+                      key={image.id}
+                      className="group relative aspect-square overflow-hidden rounded-lg border bg-muted cursor-pointer"
+                      onClick={() => handleImageClick(image)}
+                    >
+                      <Image
+                        src={image.url}
+                        alt={image.title}
+                        fill
+                        className="object-cover transition-transform group-hover:scale-105"
+                      />
+                      <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/60 to-transparent p-4">
+                        <p className="text-sm font-medium text-white">
+                          {image.title}
+                        </p>
+                        <p className="text-xs text-white/80">
+                          {new Date(image.created_at).toLocaleDateString('ja-JP')}
+                        </p>
+                      </div>
                     </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>
