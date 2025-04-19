@@ -7,6 +7,10 @@ const nextConfig = {
         hostname: '**',
       },
     ],
+    domains: ['pseahbfqdbaoicnltkzd.supabase.co'],
+  },
+  experimental: {
+    serverActions: true,
   },
 };
 

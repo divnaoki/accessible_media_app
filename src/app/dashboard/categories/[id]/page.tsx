@@ -14,13 +14,16 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
+  DialogFooter,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { ImageIcon, Upload, Volume2 } from 'lucide-react';
+import { ImageIcon, Upload, Volume2, Trash2, Menu, X } from 'lucide-react';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import Image from 'next/image';
 import { useRouter, useParams } from 'next/navigation';
+import { useToast } from "@/hooks/use-toast";
 
 // グローバルな型定義を追加
 declare global {
@@ -61,9 +64,13 @@ export default function CategoryDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedImage, setSelectedImage] = useState<Image | null>(null);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
   const router = useRouter();
   const params = useParams();
   const supabase = createClientComponentClient();
+  const { toast } = useToast();
 
   useEffect(() => {
     const fetchCategoryData = async () => {
@@ -255,6 +262,55 @@ export default function CategoryDetailPage() {
     setSelectedImage(null);
   };
 
+  const handleDeleteCategory = async () => {
+    setIsDeleting(true);
+    try {
+      if (!category) return;
+
+      // まず、カテゴリーに紐づく画像のファイルを削除
+      for (const image of images) {
+        const { error: storageError } = await supabase
+          .storage
+          .from('images')
+          .remove([image.file_name]);
+
+        if (storageError) {
+          console.error('Storage deletion error:', storageError);
+          throw new Error('画像ファイルの削除中にエラーが発生しました');
+        }
+      }
+
+      // 画像レコードの削除（カスケード削除が設定されているため自動的に削除される）
+      // カテゴリーの削除
+      const { error: deleteError } = await supabase
+        .from('categories')
+        .delete()
+        .eq('id', category.id);
+
+      if (deleteError) throw deleteError;
+
+      toast({
+        title: "カテゴリーを削除しました",
+        description: "関連する画像も全て削除されました",
+      });
+
+      // ダッシュボードにリダイレクト
+      router.push('/dashboard');
+      router.refresh();
+
+    } catch (error) {
+      console.error('Delete error:', error);
+      toast({
+        title: "エラー",
+        description: error instanceof Error ? error.message : "カテゴリーの削除に失敗しました",
+        variant: "destructive",
+      });
+    } finally {
+      setIsDeleting(false);
+      setIsDeleteDialogOpen(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center">
@@ -301,72 +357,110 @@ export default function CategoryDetailPage() {
   }
 
   return (
-    <div className="container mx-auto py-8 px-4">
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        {/* 左サイドメニュー */}
-        <div className="md:col-span-1 space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <ImageIcon className="h-5 w-5" />
-                {category.name}
-              </CardTitle>
-              <CardDescription>{category.description}</CardDescription>
-            </CardHeader>
-          </Card>
+    <div className="min-h-screen">
+      {/* ハンバーガーメニューボタン */}
+      <div className="sticky top-[72px] z-50 mb-4 px-4">
+        <Button
+          variant="ghost"
+          size="icon"
+          className="bg-background"
+          onClick={() => setIsMenuOpen(!isMenuOpen)}
+        >
+          {isMenuOpen ? (
+            <X className="h-6 w-6" />
+          ) : (
+            <Menu className="h-6 w-6" />
+          )}
+        </Button>
+      </div>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>画像のアップロード</CardTitle>
-              <CardDescription>
-                このカテゴリーに新しい画像を追加します
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <form onSubmit={handleUpload} className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="title">タイトル</Label>
-                  <Input
-                    id="title"
-                    name="title"
-                    placeholder="画像のタイトルを入力"
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="image">画像ファイル</Label>
-                  <Input
-                    id="image"
-                    name="image"
-                    type="file"
-                    accept="image/*"
-                    required
-                  />
-                </div>
-                <Button
-                  type="submit"
-                  className="w-full"
-                  disabled={isUploading}
-                >
-                  {isUploading ? (
-                    <>
-                      <Upload className="mr-2 h-4 w-4 animate-spin" />
-                      アップロード中...
-                    </>
-                  ) : (
-                    <>
-                      <Upload className="mr-2 h-4 w-4" />
-                      アップロード
-                    </>
-                  )}
-                </Button>
-              </form>
-            </CardContent>
-          </Card>
+      <div className="relative flex">
+        {/* 左サイドメニュー */}
+        <div className={`
+          fixed md:static top-[72px] left-0 h-[calc(100vh-72px)] md:h-auto
+          transform transition-all duration-300 ease-in-out
+          ${isMenuOpen 
+            ? 'w-full md:w-80 opacity-100 visible md:mr-6' 
+            : 'w-0 opacity-0 invisible'
+          }
+          bg-background md:bg-transparent
+          p-4 md:p-0
+          overflow-y-auto
+          z-40
+        `}>
+          <div className={`space-y-6 ${!isMenuOpen ? 'hidden' : ''}`}>
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <ImageIcon className="h-5 w-5" />
+                    {category.name}
+                  </div>
+                  <Button
+                    variant="destructive"
+                    size="icon"
+                    onClick={() => setIsDeleteDialogOpen(true)}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </CardTitle>
+                <CardDescription>{category.description}</CardDescription>
+              </CardHeader>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>画像のアップロード</CardTitle>
+                <CardDescription>
+                  このカテゴリーに新しい画像を追加します
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <form onSubmit={handleUpload} className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="title">タイトル</Label>
+                    <Input
+                      id="title"
+                      name="title"
+                      placeholder="画像のタイトルを入力"
+                      required
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="image">画像ファイル</Label>
+                    <Input
+                      id="image"
+                      name="image"
+                      type="file"
+                      accept="image/*"
+                      required
+                    />
+                  </div>
+                  <Button
+                    type="submit"
+                    className="w-full"
+                    disabled={isUploading}
+                  >
+                    {isUploading ? (
+                      <>
+                        <Upload className="mr-2 h-4 w-4 animate-spin" />
+                        アップロード中...
+                      </>
+                    ) : (
+                      <>
+                        <Upload className="mr-2 h-4 w-4" />
+                        アップロード
+                      </>
+                    )}
+                  </Button>
+                </form>
+              </CardContent>
+            </Card>
+          </div>
         </div>
 
         {/* メインコンテンツ */}
-        <div className="md:col-span-3">
+        <div className="flex-1 px-4 transition-all duration-300 ease-in-out">
           <Card>
             <CardHeader>
               <CardTitle>画像一覧</CardTitle>
@@ -430,6 +524,45 @@ export default function CategoryDetailPage() {
               />
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* 削除確認ダイアログ */}
+      <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>カテゴリーの削除</DialogTitle>
+            <DialogDescription>
+              このカテゴリーを削除すると、含まれる全ての画像も削除されます。
+              この操作は取り消すことができません。
+            </DialogDescription>
+          </DialogHeader>
+          <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 my-4">
+            <div className="flex">
+              <div className="ml-3">
+                <p className="text-sm text-yellow-700">
+                  このカテゴリーには{images.length}枚の画像が含まれています。
+                  全ての画像が完全に削除されます。
+                </p>
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setIsDeleteDialogOpen(false)}
+              disabled={isDeleting}
+            >
+              キャンセル
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleDeleteCategory}
+              disabled={isDeleting}
+            >
+              {isDeleting ? "削除中..." : "削除する"}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

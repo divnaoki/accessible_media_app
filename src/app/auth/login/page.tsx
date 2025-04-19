@@ -39,10 +39,10 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
-      <div className="w-full max-w-md space-y-8">
+    <div className="flex min-h-[calc(100vh-4rem)] flex-col items-center justify-center">
+      <div className="w-full max-w-md space-y-4">
         <div>
-          <h2 className="mt-6 text-center text-3xl font-bold tracking-tight">
+          <h2 className="text-center text-2xl font-bold tracking-tight">
             ログイン
           </h2>
           <p className="mt-2 text-center text-sm text-gray-600">
@@ -55,7 +55,7 @@ export default function LoginPage() {
             </Link>
           </p>
         </div>
-        <form className="mt-8 space-y-6" onSubmit={handleLogin}>
+        <form className="space-y-4" onSubmit={handleLogin}>
           <div className="space-y-4 rounded-md shadow-sm">
             <div>
               <Label htmlFor="email">メールアドレス</Label>
