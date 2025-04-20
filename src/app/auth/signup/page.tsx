@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 export default function SignUpPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const router = useRouter();
@@ -19,6 +20,13 @@ export default function SignUpPage() {
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+
+    // パスワードの一致確認
+    if (password !== confirmPassword) {
+      setError("パスワードが一致しません");
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -67,7 +75,6 @@ export default function SignUpPage() {
                 type="email"
                 autoComplete="email"
                 required
-                className="relative block w-full rounded-md border-0 py-1.5 px-3 text-gray-900 ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:z-10 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6"
                 placeholder="メールアドレスを入力"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
@@ -81,16 +88,35 @@ export default function SignUpPage() {
                 type="password"
                 autoComplete="new-password"
                 required
-                className="relative block w-full rounded-md border-0 py-1.5 px-3 text-gray-900 ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:z-10 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6"
                 placeholder="パスワードを入力"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
               />
             </div>
+            <div>
+              <Label htmlFor="confirmPassword">パスワード（確認）</Label>
+              <Input
+                id="confirmPassword"
+                name="confirmPassword"
+                type="password"
+                autoComplete="new-password"
+                required
+                placeholder="パスワードを再入力"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+              />
+            </div>
           </div>
 
           {error && (
-            <div className="text-red-500 text-sm text-center">{error}</div>
+            <div className="rounded-md bg-red-50 p-4">
+              <div className="flex">
+                <div className="ml-3">
+                  <h3 className="text-sm font-medium text-red-800">エラー</h3>
+                  <div className="mt-2 text-sm text-red-700">{error}</div>
+                </div>
+              </div>
+            </div>
           )}
 
           <div>

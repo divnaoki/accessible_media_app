@@ -34,6 +34,7 @@ export function MainNav() {
 
   const handleSignOut = async () => {
     await supabase.auth.signOut()
+    window.location.href = "/auth/login"
   }
 
   return (

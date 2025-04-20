@@ -19,11 +19,12 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { ImageIcon, Upload, Volume2, Trash2, Menu, X } from 'lucide-react';
+import { ImageIcon, Upload, Volume2, Trash2, Menu, X, Edit } from 'lucide-react';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import Image from 'next/image';
 import { useRouter, useParams } from 'next/navigation';
 import { useToast } from "@/hooks/use-toast";
+import { Progress } from '@/components/ui/progress';
 
 // グローバルな型定義を追加
 declare global {
@@ -57,6 +58,12 @@ type Image = {
   updated_at: string;
 };
 
+// アップロード進捗の型定義
+type UploadProgressEvent = {
+  loaded: number;
+  total: number;
+};
+
 export default function CategoryDetailPage() {
   const [category, setCategory] = useState<Category | null>(null);
   const [images, setImages] = useState<Image[]>([]);
@@ -67,6 +74,7 @@ export default function CategoryDetailPage() {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const router = useRouter();
   const params = useParams();
   const supabase = createClientComponentClient();
@@ -114,6 +122,7 @@ export default function CategoryDetailPage() {
     e.preventDefault();
     setIsUploading(true);
     setError(null);
+    setUploadProgress(0);
 
     const form = e.currentTarget;
 
@@ -151,14 +160,18 @@ export default function CategoryDetailPage() {
       const fileExt = file.name.split('.').pop();
       const fileName = `${user.id}_${timestamp}.${fileExt}`;
 
-      // Supabase Storageにアップロード
+      // Supabase Storageにアップロード（進捗表示付き）
       const { data: uploadData, error: uploadError } = await supabase
         .storage
         .from('images')
         .upload(fileName, file, {
           cacheControl: '3600',
-          upsert: false
-        });
+          upsert: false,
+          onUploadProgress: (progress: UploadProgressEvent) => {
+            const percent = (progress.loaded / progress.total) * 100;
+            setUploadProgress(Math.round(percent));
+          },
+        } as any); // Supabaseの型定義に不足があるため、一時的にanyを使用
 
       if (uploadError) {
         console.error('ストレージアップロードエラー:', uploadError);
@@ -208,6 +221,12 @@ export default function CategoryDetailPage() {
 
       setImages(imagesData || []);
 
+      // 成功時の処理
+      toast({
+        title: "アップロード完了",
+        description: "画像のアップロードが完了しました。",
+      });
+
     } catch (error) {
       console.error('アップロードエラー:', error);
       if (error instanceof Error) {
@@ -217,6 +236,7 @@ export default function CategoryDetailPage() {
       }
     } finally {
       setIsUploading(false);
+      setUploadProgress(0);
     }
   };
 
@@ -424,6 +444,7 @@ export default function CategoryDetailPage() {
                       name="title"
                       placeholder="画像のタイトルを入力"
                       required
+                      disabled={isUploading}
                     />
                   </div>
                   <div className="space-y-2">
@@ -434,26 +455,84 @@ export default function CategoryDetailPage() {
                       type="file"
                       accept="image/*"
                       required
+                      disabled={isUploading}
                     />
                   </div>
+                  {isUploading && (
+                    <div className="space-y-2">
+                      <div className="text-sm text-gray-500">
+                        アップロード中... {uploadProgress}%
+                      </div>
+                      <Progress value={uploadProgress} className="w-full" />
+                    </div>
+                  )}
+                  {error && (
+                    <div className="text-red-500 text-sm">{error}</div>
+                  )}
                   <Button
                     type="submit"
                     className="w-full"
                     disabled={isUploading}
                   >
                     {isUploading ? (
-                      <>
-                        <Upload className="mr-2 h-4 w-4 animate-spin" />
+                      <div className="flex items-center">
+                        <Upload className="mr-2 h-4 w-4" />
                         アップロード中...
-                      </>
+                      </div>
                     ) : (
-                      <>
+                      <div className="flex items-center">
                         <Upload className="mr-2 h-4 w-4" />
                         アップロード
-                      </>
+                      </div>
                     )}
                   </Button>
                 </form>
+              </CardContent>
+            </Card>
+
+            {/* 画像編集カード */}
+            <Card>
+              <CardHeader>
+                <CardTitle>画像の管理</CardTitle>
+                <CardDescription>
+                  画像の編集や削除を行います
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {images.map((image) => (
+                    <div key={image.id} className="flex items-center justify-between p-2 border rounded-lg">
+                      <div className="flex items-center space-x-2">
+                        <div className="w-12 h-12 relative rounded overflow-hidden">
+                          <Image
+                            src={image.url}
+                            alt={image.title}
+                            fill
+                            className="object-cover"
+                          />
+                        </div>
+                        <div className="truncate">
+                          <p className="font-medium truncate">{image.title}</p>
+                          <p className="text-sm text-gray-500">
+                            {new Date(image.created_at).toLocaleDateString('ja-JP')}
+                          </p>
+                        </div>
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        onClick={() => router.push(`/dashboard/categories/${category?.id}/images/${image.id}/edit`)}
+                      >
+                        <Edit className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ))}
+                  {images.length === 0 && (
+                    <div className="text-center py-4 text-gray-500">
+                      画像がありません
+                    </div>
+                  )}
+                </div>
               </CardContent>
             </Card>
           </div>
