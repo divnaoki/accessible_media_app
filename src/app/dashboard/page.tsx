@@ -8,7 +8,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { FolderPlus, ImageIcon, Plus } from "lucide-react";
+import { FolderPlus, ImageIcon, Plus, Pencil } from "lucide-react";
 import Link from "next/link";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 import { useEffect, useState } from "react";
@@ -96,10 +96,20 @@ export default function DashboardPage() {
 
         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
           {categories.map((category) => (
-            <Card
+            <div
               key={category.id}
-              className="hover:bg-muted/50 transition-colors cursor-pointer"
+              className="relative group bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition-shadow"
             >
+              <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => router.push(`/dashboard/categories/${category.id}/edit`)}
+                  className="h-8 w-8"
+                >
+                  <Pencil className="h-4 w-4" />
+                </Button>
+              </div>
               <Link href={`/dashboard/categories/${category.id}`}>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
@@ -114,7 +124,7 @@ export default function DashboardPage() {
                   </p>
                 </CardContent>
               </Link>
-            </Card>
+            </div>
           ))}
 
           <Card className="hover:bg-muted/50 transition-colors">

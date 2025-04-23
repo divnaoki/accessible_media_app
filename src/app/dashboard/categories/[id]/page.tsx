@@ -19,12 +19,14 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { ImageIcon, Upload, Volume2, Trash2, Menu, X, Edit } from 'lucide-react';
+import { ImageIcon, Upload, Volume2, Trash2, Menu, X, Edit, Pencil, ArrowLeft, VideoIcon } from 'lucide-react';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import Image from 'next/image';
 import { useRouter, useParams } from 'next/navigation';
 import { useToast } from "@/hooks/use-toast";
 import { Progress } from '@/components/ui/progress';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { uploadVideo } from '@/lib/cloudinary';
 
 // グローバルな型定義を追加
 declare global {
@@ -58,6 +60,22 @@ type Image = {
   updated_at: string;
 };
 
+// 動画の型定義
+type Video = {
+  id: string;
+  user_id: string;
+  category_id: string;
+  title: string;
+  description: string | null;
+  url: string;
+  public_id: string;
+  file_name: string;
+  file_size: number;
+  file_type: string;
+  created_at: string;
+  updated_at: string;
+};
+
 // アップロード進捗の型定義
 type UploadProgressEvent = {
   loaded: number;
@@ -67,6 +85,7 @@ type UploadProgressEvent = {
 export default function CategoryDetailPage() {
   const [category, setCategory] = useState<Category | null>(null);
   const [images, setImages] = useState<Image[]>([]);
+  const [videos, setVideos] = useState<Video[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -75,6 +94,8 @@ export default function CategoryDetailPage() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [isVideoUploading, setIsVideoUploading] = useState(false);
+  const [videoUploadProgress, setVideoUploadProgress] = useState(0);
   const router = useRouter();
   const params = useParams();
   const supabase = createClientComponentClient();
@@ -88,13 +109,22 @@ export default function CategoryDetailPage() {
         }
 
         // カテゴリー情報の取得
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) {
+          throw new Error('ユーザーが認証されていません');
+        }
+
         const { data: categoryData, error: categoryError } = await supabase
           .from('categories')
           .select('*')
           .eq('id', params.id)
+          .eq('user_id', user.id)
           .single();
 
         if (categoryError) throw categoryError;
+        if (!categoryData) {
+          throw new Error('カテゴリーが見つかりません');
+        }
         setCategory(categoryData);
 
         // 画像データの取得
@@ -102,10 +132,22 @@ export default function CategoryDetailPage() {
           .from('images')
           .select('*')
           .eq('category_id', params.id)
+          .eq('user_id', user.id)
           .order('created_at', { ascending: false });
 
         if (imagesError) throw imagesError;
         setImages(imagesData || []);
+
+        // 動画データの取得
+        const { data: videosData, error: videosError } = await supabase
+          .from('videos')
+          .select('*')
+          .eq('category_id', params.id)
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false });
+
+        if (videosError) throw videosError;
+        setVideos(videosData || []);
 
       } catch (error) {
         console.error('Error fetching category data:', error);
@@ -155,10 +197,10 @@ export default function CategoryDetailPage() {
         throw new Error('ユーザーが認証されていません');
       }
 
-      // ファイル名を生成（ユーザーID_タイムスタンプ_元のファイル名）
+      // ファイル名を生成（ユーザーID/タイムスタンプ_元のファイル名）
       const timestamp = new Date().getTime();
       const fileExt = file.name.split('.').pop();
-      const fileName = `${user.id}_${timestamp}.${fileExt}`;
+      const fileName = `${user.id}/${timestamp}_${file.name}`;
 
       // Supabase Storageにアップロード（進捗表示付き）
       const { data: uploadData, error: uploadError } = await supabase
@@ -182,7 +224,13 @@ export default function CategoryDetailPage() {
       const { data: { publicUrl } } = supabase
         .storage
         .from('images')
-        .getPublicUrl(fileName);
+        .getPublicUrl(fileName, {
+          transform: {
+            width: 800,
+            height: 600,
+            resize: 'cover'
+          }
+        });
 
       // 画像情報をデータベースに保存
       const { error: insertError } = await supabase
@@ -212,6 +260,7 @@ export default function CategoryDetailPage() {
         .from('images')
         .select('*')
         .eq('category_id', params.id)
+        .eq('user_id', user.id)
         .order('created_at', { ascending: false });
 
       if (imagesError) {
@@ -229,14 +278,134 @@ export default function CategoryDetailPage() {
 
     } catch (error) {
       console.error('アップロードエラー:', error);
+      let errorMessage = '画像のアップロードに失敗しました。';
+      
       if (error instanceof Error) {
-        setError(error.message);
-      } else {
-        setError('画像のアップロードに失敗しました。詳細なエラー情報を確認してください。');
+        errorMessage = error.message;
+      } else if (typeof error === 'object' && error !== null) {
+        // Cloudinaryからのエラーレスポンスを確認
+        const cloudinaryError = error as { error?: { message?: string } };
+        if (cloudinaryError?.error?.message) {
+          errorMessage = `Cloudinaryエラー: ${cloudinaryError.error.message}`;
+        }
       }
+      
+      setError(errorMessage);
+      toast({
+        title: "アップロードエラー",
+        description: errorMessage,
+        variant: "destructive",
+      });
     } finally {
       setIsUploading(false);
       setUploadProgress(0);
+    }
+  };
+
+  const handleVideoUpload = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setIsVideoUploading(true);
+    setError(null);
+    setVideoUploadProgress(0);
+
+    const form = e.currentTarget;
+
+    try {
+      if (!params?.id) {
+        throw new Error('カテゴリーIDが指定されていません');
+      }
+
+      const formData = new FormData(form);
+      const file = formData.get('video') as File;
+      const title = formData.get('videoTitle') as string;
+      const description = formData.get('videoDescription') as string;
+
+      if (!file) {
+        throw new Error('ファイルが選択されていません');
+      }
+
+      // ファイルサイズのチェック（100MBまで）
+      if (file.size > 100 * 1024 * 1024) {
+        throw new Error('ファイルサイズは100MB以下にしてください');
+      }
+
+      // ファイルタイプのチェック
+      const allowedTypes = ["video/mp4", "video/quicktime", "video/x-msvideo"];
+      if (!allowedTypes.includes(file.type)) {
+        throw new Error('対応していないファイル形式です。MP4、MOV、AVI形式の動画をアップロードしてください。');
+      }
+
+      // Cloudinaryにアップロード
+      const { url, publicId } = await uploadVideo(file);
+
+      // 現在のユーザーIDを取得
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        throw new Error('ユーザーが認証されていません');
+      }
+
+      // Supabaseにメタデータを保存
+      const { error: insertError } = await supabase
+        .from("videos")
+        .insert({
+          user_id: user.id,
+          category_id: params.id,
+          url,
+          public_id: publicId,
+          title: title || file.name,
+          description,
+          file_name: file.name,
+          file_size: file.size,
+          file_type: file.type,
+        });
+
+      if (insertError) throw insertError;
+
+      toast({
+        title: "動画をアップロードしました",
+        description: `${title || file.name}をアップロードしました`,
+        duration: 3000,
+      });
+
+      // フォームをリセット
+      if (form) {
+        form.reset();
+      }
+
+      // 動画一覧を更新
+      const { data: videosData, error: videosError } = await supabase
+        .from("videos")
+        .select("*")
+        .eq("category_id", params.id)
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false });
+
+      if (videosError) throw videosError;
+      setVideos(videosData || []);
+
+    } catch (error) {
+      console.error('アップロードエラー:', error);
+      let errorMessage = '動画のアップロードに失敗しました。';
+      
+      if (error instanceof Error) {
+        errorMessage = error.message;
+      } else if (typeof error === 'object' && error !== null) {
+        // Cloudinaryからのエラーレスポンスを確認
+        const cloudinaryError = error as { error?: { message?: string } };
+        if (cloudinaryError?.error?.message) {
+          errorMessage = `Cloudinaryエラー: ${cloudinaryError.error.message}`;
+        }
+      }
+      
+      setError(errorMessage);
+      toast({
+        title: "アップロードエラー",
+        description: errorMessage,
+        variant: "destructive",
+      });
+    } finally {
+      setIsVideoUploading(false);
+      setVideoUploadProgress(0);
     }
   };
 
@@ -430,63 +599,144 @@ export default function CategoryDetailPage() {
 
             <Card>
               <CardHeader>
-                <CardTitle>画像のアップロード</CardTitle>
+                <CardTitle>メディアのアップロード</CardTitle>
                 <CardDescription>
-                  このカテゴリーに新しい画像を追加します
+                  このカテゴリーに新しいメディアを追加します
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <form onSubmit={handleUpload} className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="title">タイトル</Label>
-                    <Input
-                      id="title"
-                      name="title"
-                      placeholder="画像のタイトルを入力"
-                      required
-                      disabled={isUploading}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="image">画像ファイル</Label>
-                    <Input
-                      id="image"
-                      name="image"
-                      type="file"
-                      accept="image/*"
-                      required
-                      disabled={isUploading}
-                    />
-                  </div>
-                  {isUploading && (
-                    <div className="space-y-2">
-                      <div className="text-sm text-gray-500">
-                        アップロード中... {uploadProgress}%
+                <Tabs defaultValue="image" className="space-y-4">
+                  <TabsList className="grid w-full grid-cols-2">
+                    <TabsTrigger value="image" className="flex items-center gap-2">
+                      <ImageIcon className="h-4 w-4" />
+                      画像
+                    </TabsTrigger>
+                    <TabsTrigger value="video" className="flex items-center gap-2">
+                      <VideoIcon className="h-4 w-4" />
+                      動画
+                    </TabsTrigger>
+                  </TabsList>
+
+                  <TabsContent value="image">
+                    <form onSubmit={handleUpload} className="space-y-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="title">タイトル</Label>
+                        <Input
+                          id="title"
+                          name="title"
+                          placeholder="画像のタイトルを入力"
+                          required
+                          disabled={isUploading}
+                        />
                       </div>
-                      <Progress value={uploadProgress} className="w-full" />
-                    </div>
-                  )}
-                  {error && (
-                    <div className="text-red-500 text-sm">{error}</div>
-                  )}
-                  <Button
-                    type="submit"
-                    className="w-full"
-                    disabled={isUploading}
-                  >
-                    {isUploading ? (
-                      <div className="flex items-center">
-                        <Upload className="mr-2 h-4 w-4" />
-                        アップロード中...
+                      <div className="space-y-2">
+                        <Label htmlFor="image">画像ファイル</Label>
+                        <Input
+                          id="image"
+                          name="image"
+                          type="file"
+                          accept="image/*"
+                          required
+                          disabled={isUploading}
+                        />
                       </div>
-                    ) : (
-                      <div className="flex items-center">
-                        <Upload className="mr-2 h-4 w-4" />
-                        アップロード
+                      {isUploading && (
+                        <div className="space-y-2">
+                          <div className="text-sm text-gray-500">
+                            アップロード中... {uploadProgress}%
+                          </div>
+                          <Progress value={uploadProgress} className="w-full" />
+                        </div>
+                      )}
+                      {error && (
+                        <div className="text-red-500 text-sm">{error}</div>
+                      )}
+                      <Button
+                        type="submit"
+                        className="w-full"
+                        disabled={isUploading}
+                      >
+                        {isUploading ? (
+                          <div className="flex items-center">
+                            <Upload className="mr-2 h-4 w-4" />
+                            アップロード中...
+                          </div>
+                        ) : (
+                          <div className="flex items-center">
+                            <Upload className="mr-2 h-4 w-4" />
+                            アップロード
+                          </div>
+                        )}
+                      </Button>
+                    </form>
+                  </TabsContent>
+
+                  <TabsContent value="video">
+                    <form onSubmit={handleVideoUpload} className="space-y-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="videoTitle">タイトル</Label>
+                        <Input
+                          id="videoTitle"
+                          name="videoTitle"
+                          placeholder="動画のタイトルを入力"
+                          required
+                          disabled={isVideoUploading}
+                        />
                       </div>
-                    )}
-                  </Button>
-                </form>
+                      <div className="space-y-2">
+                        <Label htmlFor="videoDescription">説明</Label>
+                        <Input
+                          id="videoDescription"
+                          name="videoDescription"
+                          placeholder="動画の説明を入力"
+                          disabled={isVideoUploading}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="video">動画ファイル</Label>
+                        <Input
+                          id="video"
+                          name="video"
+                          type="file"
+                          accept="video/mp4,video/quicktime,video/x-msvideo"
+                          required
+                          disabled={isVideoUploading}
+                        />
+                        <p className="text-sm text-gray-500">
+                          対応形式: MP4, MOV, AVI (最大100MB)
+                        </p>
+                      </div>
+                      {isVideoUploading && (
+                        <div className="space-y-2">
+                          <div className="text-sm text-gray-500">
+                            アップロード中... {videoUploadProgress}%
+                          </div>
+                          <Progress value={videoUploadProgress} className="w-full" />
+                        </div>
+                      )}
+                      {error && (
+                        <div className="text-red-500 text-sm">{error}</div>
+                      )}
+                      <Button
+                        type="submit"
+                        className="w-full"
+                        disabled={isVideoUploading}
+                      >
+                        {isVideoUploading ? (
+                          <div className="flex items-center">
+                            <Upload className="mr-2 h-4 w-4 animate-spin" />
+                            アップロード中...
+                          </div>
+                        ) : (
+                          <div className="flex items-center">
+                            <Upload className="mr-2 h-4 w-4" />
+                            アップロード
+                          </div>
+                        )}
+                      </Button>
+                    </form>
+                  </TabsContent>
+                </Tabs>
               </CardContent>
             </Card>
 
@@ -542,42 +792,94 @@ export default function CategoryDetailPage() {
         <div className="flex-1 px-4 transition-all duration-300 ease-in-out">
           <Card>
             <CardHeader>
-              <CardTitle>画像一覧</CardTitle>
+              <CardTitle>メディア一覧</CardTitle>
               <CardDescription>
-                このカテゴリーに含まれる画像を表示しています
+                このカテゴリーに含まれるメディアを表示しています
               </CardDescription>
             </CardHeader>
             <CardContent>
-              {images.length === 0 ? (
-                <div className="text-center py-8">
-                  <p className="text-muted-foreground">このカテゴリーにはまだ画像がありません</p>
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {images.map((image) => (
-                    <div
-                      key={image.id}
-                      className="group relative aspect-square overflow-hidden rounded-lg border bg-muted cursor-pointer"
-                      onClick={() => handleImageClick(image)}
-                    >
-                      <Image
-                        src={image.url}
-                        alt={image.title}
-                        fill
-                        className="object-cover transition-transform group-hover:scale-105"
-                      />
-                      <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/60 to-transparent p-4">
-                        <p className="text-sm font-medium text-white">
-                          {image.title}
-                        </p>
-                        <p className="text-xs text-white/80">
-                          {new Date(image.created_at).toLocaleDateString('ja-JP')}
-                        </p>
-                      </div>
+              <Tabs defaultValue="images" className="space-y-4">
+                <TabsList className="grid w-full grid-cols-2">
+                  <TabsTrigger value="images" className="flex items-center gap-2">
+                    <ImageIcon className="h-4 w-4" />
+                    画像
+                  </TabsTrigger>
+                  <TabsTrigger value="videos" className="flex items-center gap-2">
+                    <VideoIcon className="h-4 w-4" />
+                    動画
+                  </TabsTrigger>
+                </TabsList>
+
+                <TabsContent value="images">
+                  {images.length === 0 ? (
+                    <div className="text-center py-8">
+                      <p className="text-muted-foreground">このカテゴリーにはまだ画像がありません</p>
                     </div>
-                  ))}
-                </div>
-              )}
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {images.map((image) => (
+                        <div
+                          key={image.id}
+                          className="group relative aspect-square overflow-hidden rounded-lg border bg-muted cursor-pointer"
+                          onClick={() => handleImageClick(image)}
+                        >
+                          <Image
+                            src={image.url}
+                            alt={image.title}
+                            fill
+                            className="object-cover transition-transform group-hover:scale-105"
+                            sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+                          />
+                          <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/60 to-transparent p-4">
+                            <p className="text-sm font-medium text-white">
+                              {image.title}
+                            </p>
+                            <p className="text-xs text-white/80">
+                              {new Date(image.created_at).toLocaleDateString('ja-JP')}
+                            </p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </TabsContent>
+
+                <TabsContent value="videos">
+                  {videos.length === 0 ? (
+                    <div className="text-center py-8">
+                      <p className="text-muted-foreground">このカテゴリーにはまだ動画がありません</p>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {videos.map((video) => (
+                        <div
+                          key={video.id}
+                          className="group relative aspect-square overflow-hidden rounded-lg border bg-muted cursor-pointer"
+                        >
+                          {/* サンプル画像を使用 */}
+                          <Image
+                            src="/sample-video-thumbnail.jpg"
+                            alt={video.title}
+                            fill
+                            className="object-cover transition-transform group-hover:scale-105"
+                          />
+                          <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/60 to-transparent p-4">
+                            <p className="text-sm font-medium text-white">
+                              {video.title}
+                            </p>
+                            <p className="text-xs text-white/80">
+                              {new Date(video.created_at).toLocaleDateString('ja-JP')}
+                            </p>
+                          </div>
+                          <div className="absolute top-2 right-2 bg-black/50 rounded-full p-2">
+                            <VideoIcon className="h-4 w-4 text-white" />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </TabsContent>
+              </Tabs>
             </CardContent>
           </Card>
         </div>
