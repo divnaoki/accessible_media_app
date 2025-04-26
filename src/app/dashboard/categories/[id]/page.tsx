@@ -289,8 +289,8 @@ export default function CategoryDetailPage() {
 
       // 成功時の処理
       toast({
-        title: "アップロード完了",
-        description: "画像のアップロードが完了しました。",
+        title: 'アップロード完了',
+        description: '画像のアップロードが完了しました。',
       });
 
     } catch (error) {
@@ -303,9 +303,9 @@ export default function CategoryDetailPage() {
       
       setError(errorMessage);
       toast({
-        title: "アップロードエラー",
+        title: 'アップロードエラー',
         description: errorMessage,
-        variant: "destructive",
+        variant: 'destructive',
       });
     } finally {
       setIsUploading(false);
@@ -321,9 +321,9 @@ export default function CategoryDetailPage() {
     
     if (!file) {
       toast({
-        title: "エラー",
-        description: "動画ファイルを選択してください",
-        variant: "destructive",
+        title: 'エラー',
+        description: '動画ファイルを選択してください',
+        variant: 'destructive',
       });
       return;
     }
@@ -375,9 +375,8 @@ export default function CategoryDetailPage() {
       if (insertError) throw insertError;
 
       toast({
-        title: "動画をアップロードしました",
+        title: 'アップロード完了',
         description: `${file.name}をアップロードしました`,
-        duration: 3000,
       });
 
       // 動画一覧を更新
@@ -397,19 +396,13 @@ export default function CategoryDetailPage() {
       
       if (error instanceof Error) {
         errorMessage = error.message;
-      } else if (typeof error === 'object' && error !== null) {
-        // Cloudinaryからのエラーレスポンスを確認
-        const cloudinaryError = error as { error?: { message?: string } };
-        if (cloudinaryError?.error?.message) {
-          errorMessage = `Cloudinaryエラー: ${cloudinaryError.error.message}`;
-        }
       }
       
       setError(errorMessage);
       toast({
-        title: "アップロードエラー",
+        title: 'アップロードエラー',
         description: errorMessage,
-        variant: "destructive",
+        variant: 'destructive',
       });
     } finally {
       setIsVideoUploading(false);
@@ -487,8 +480,8 @@ export default function CategoryDetailPage() {
       if (deleteError) throw deleteError;
 
       toast({
-        title: "カテゴリーを削除しました",
-        description: "関連する画像も全て削除されました",
+        title: '削除完了',
+        description: 'カテゴリーを削除しました',
       });
 
       // ダッシュボードにリダイレクト
@@ -498,9 +491,9 @@ export default function CategoryDetailPage() {
     } catch (error) {
       console.error('Delete error:', error);
       toast({
-        title: "エラー",
-        description: error instanceof Error ? error.message : "カテゴリーの削除に失敗しました",
-        variant: "destructive",
+        title: 'エラー',
+        description: error instanceof Error ? error.message : 'カテゴリーの削除に失敗しました',
+        variant: 'destructive',
       });
     } finally {
       setIsDeleting(false);
@@ -544,9 +537,8 @@ export default function CategoryDetailPage() {
       }
 
       toast({
-        title: "動画を削除しました",
+        title: '削除完了',
         description: `${videoToDelete.title}を削除しました`,
-        duration: 3000,
       });
 
       // 動画一覧を更新
@@ -568,9 +560,9 @@ export default function CategoryDetailPage() {
     } catch (error) {
       console.error("動画削除エラー:", error);
       toast({
-        title: "エラー",
-        description: "動画の削除に失敗しました",
-        variant: "destructive",
+        title: 'エラー',
+        description: '動画の削除に失敗しました',
+        variant: 'destructive',
       });
     } finally {
       setIsDeletingVideo(false);
