@@ -44,7 +44,7 @@ export function EditVideo({ video, onClose }: EditVideoProps) {
       if (error) throw error;
 
       toast.success(`${video.title}を更新しました`);
-      router.push(`/dashboard/categories/${video.categoryId}`);
+      router.push(`/dashboard/categories/${video.category_id}`);
       router.refresh();
     } catch (error) {
       console.error('更新エラー:', error);
@@ -63,7 +63,7 @@ export function EditVideo({ video, onClose }: EditVideoProps) {
       toast.success('動画を削除しました');
       
       // カテゴリ詳細ページに戻る
-      router.push(`/dashboard/categories/${video.categoryId}`);
+      router.push(`/dashboard/categories/${video.category_id}`);
       // ページを再読み込み
       router.refresh();
     } catch (error) {
