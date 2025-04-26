@@ -100,11 +100,7 @@ export default function EditVideoPage() {
 
       if (insertError) throw insertError;
 
-      toast({
-        title: "動画をアップロードしました",
-        description: `${file.name}をアップロードしました`,
-        duration: 3000,
-      });
+      toast.success(`${file.name}をアップロードしました`);
 
       // 動画一覧を更新
       const { data: videosData, error: videosError } = await supabase
@@ -125,11 +121,7 @@ export default function EditVideoPage() {
         errorMessage = error.message;
       }
       
-      toast({
-        title: "アップロードエラー",
-        description: errorMessage,
-        variant: "destructive",
-      });
+      toast.error(errorMessage);
     } finally {
       setIsUploading(false);
       setUploadProgress(0);
