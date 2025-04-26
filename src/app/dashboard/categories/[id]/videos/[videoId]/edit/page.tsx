@@ -167,7 +167,28 @@ export default function EditVideoPage() {
 
     try {
       setIsDeleting(true);
+
+      // 現在のユーザーIDを取得
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        throw new Error('ユーザーが認証されていません');
+      }
+
+      // Cloudinaryから動画を削除
       await deleteVideo(video.public_id);
+
+      // Supabaseから動画を削除
+      const { error: deleteError } = await supabase
+        .from('videos')
+        .delete()
+        .eq('id', video.id)
+        .eq('user_id', user.id);
+
+      if (deleteError) {
+        console.error('Supabase削除エラー:', deleteError);
+        throw new Error(`Supabaseからの動画削除に失敗しました: ${deleteError.message}`);
+      }
+
       toast.success('動画を削除しました');
       
       // カテゴリ詳細ページに戻る

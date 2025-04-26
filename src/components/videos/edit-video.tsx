@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabase";
+import { deleteVideo } from "@/lib/cloudinary";
 
 interface EditVideoProps {
   video: Video;
@@ -36,20 +37,25 @@ export function EditVideo({ video, onClose }: EditVideoProps) {
       const { error } = await supabase
         .from('videos')
         .update({
-          title: video.title,
-          description: video.description,
+          title,
+          description,
+          updated_at: new Date().toISOString(),
         })
         .eq('id', video.id)
         .eq('user_id', user.id);
 
       if (error) throw error;
 
-      toast.success(`${video.title}を更新しました`);
+      toast({
+        description: `${title}を更新しました`,
+      });
       router.push(`/dashboard/categories/${video.category_id}`);
       router.refresh();
     } catch (error) {
       console.error('更新エラー:', error);
-      toast.error('動画の更新に失敗しました');
+      toast({
+        description: '動画の更新に失敗しました',
+      });
     } finally {
       setIsSubmitting(false);
     }
@@ -60,16 +66,44 @@ export function EditVideo({ video, onClose }: EditVideoProps) {
 
     try {
       setIsDeleting(true);
-      await deleteVideo(video.public_id);
-      toast.success('動画を削除しました');
+
+      // 現在のユーザーIDを取得
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        throw new Error('ユーザーが認証されていません');
+      }
+
+      // Cloudinaryから動画を削除
+      const deleteResponse = await deleteVideo(video.public_id);
+      if (!deleteResponse.success) {
+        throw new Error('Cloudinaryからの動画削除に失敗しました');
+      }
+
+      // Supabaseから動画を削除
+      const { error: deleteError } = await supabase
+        .from('videos')
+        .delete()
+        .eq('id', video.id)
+        .eq('user_id', user.id);
+
+      if (deleteError) {
+        console.error('Supabase削除エラー:', deleteError);
+        throw new Error(`Supabaseからの動画削除に失敗しました: ${deleteError.message}`);
+      }
+
+      toast({
+        description: '動画を削除しました',
+      });
       
       // カテゴリ詳細ページに戻る
       router.push(`/dashboard/categories/${video.category_id}`);
       // ページを再読み込み
       router.refresh();
     } catch (error) {
-      console.error('Error deleting video:', error);
-      toast.error('動画の削除に失敗しました');
+      console.error('動画削除エラー:', error);
+      toast({
+        description: error instanceof Error ? error.message : '動画の削除に失敗しました',
+      });
     } finally {
       setIsDeleting(false);
     }
@@ -101,13 +135,21 @@ export function EditVideo({ video, onClose }: EditVideoProps) {
       <div className="flex justify-end space-x-2">
         <Button
           type="button"
+          variant="destructive"
+          onClick={handleDelete}
+          disabled={isDeleting || isSubmitting}
+        >
+          {isDeleting ? "削除中..." : "削除"}
+        </Button>
+        <Button
+          type="button"
           variant="outline"
           onClick={onClose}
-          disabled={isSubmitting}
+          disabled={isSubmitting || isDeleting}
         >
           キャンセル
         </Button>
-        <Button type="submit" disabled={isSubmitting}>
+        <Button type="submit" disabled={isSubmitting || isDeleting}>
           {isSubmitting ? "更新中..." : "更新"}
         </Button>
       </div>
