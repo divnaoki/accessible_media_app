@@ -1,8 +1,10 @@
-// Cloudinaryの設定はサーバーサイドでのみ使用するため、ここでは削除
+// クライアントサイドではcloudinaryの設定は不要
+// import { v2 as cloudinary } from 'cloudinary';
+
 // cloudinary.config({
 //   cloud_name: process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME,
 //   api_key: process.env.NEXT_PUBLIC_CLOUDINARY_API_KEY,
-//   api_secret: process.env.NEXT_PUBLIC_CLOUDINARY_API_SECRET,
+//   api_secret: process.env.CLOUDINARY_API_SECRET,
 // });
 
 export const uploadVideo = async (file: File) => {
@@ -10,7 +12,6 @@ export const uploadVideo = async (file: File) => {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('upload_preset', process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET || '');
-    formData.append('resource_type', 'video');
 
     const response = await fetch(
       `https://api.cloudinary.com/v1_1/${process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME}/video/upload`,
@@ -21,9 +22,7 @@ export const uploadVideo = async (file: File) => {
     );
 
     if (!response.ok) {
-      const errorData = await response.json();
-      console.error('Cloudinary upload error response:', errorData);
-      throw new Error(`Cloudinary upload failed: ${errorData.error?.message || 'Unknown error'}`);
+      throw new Error('Failed to upload video');
     }
 
     const data = await response.json();
@@ -32,36 +31,53 @@ export const uploadVideo = async (file: File) => {
       publicId: data.public_id,
     };
   } catch (error) {
-    console.error('Cloudinary upload error:', error);
+    console.error('Error uploading video:', error);
     throw error;
   }
 };
 
 export const deleteVideo = async (publicId: string) => {
   try {
-    const response = await fetch(
-      `https://api.cloudinary.com/v1_1/${process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME}/video/destroy`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          public_id: publicId,
-          api_key: process.env.NEXT_PUBLIC_CLOUDINARY_API_KEY,
-          api_secret: process.env.NEXT_PUBLIC_CLOUDINARY_API_SECRET,
-          timestamp: Math.floor(Date.now() / 1000),
-        }),
-      }
-    );
+    const response = await fetch('/api/cloudinary/delete', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ publicId }),
+    });
 
     if (!response.ok) {
-      throw new Error('Cloudinary delete failed');
+      throw new Error('Failed to delete video');
     }
 
     return await response.json();
   } catch (error) {
-    console.error('Cloudinary delete error:', error);
+    console.error('Error deleting video:', error);
+    throw error;
+  }
+};
+
+export const generateSignature = async (publicId: string, timestamp: number) => {
+  try {
+    const response = await fetch('/api/cloudinary/sign', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        publicId,
+        timestamp,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to generate signature');
+    }
+
+    const data = await response.json();
+    return data.signature;
+  } catch (error) {
+    console.error('Error generating signature:', error);
     throw error;
   }
 }; 

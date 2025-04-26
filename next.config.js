@@ -7,6 +7,7 @@ const nextConfig = {
         hostname: 'pseahbfqdbaoicnltkzd.supabase.co',
       },
     ],
+    domains: ['res.cloudinary.com'],
   },
   experimental: {
     serverActions: true,

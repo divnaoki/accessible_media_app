@@ -27,6 +27,8 @@ import { useToast } from "@/hooks/use-toast";
 import { Progress } from '@/components/ui/progress';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { uploadVideo } from '@/lib/cloudinary';
+import { EditVideo } from "@/components/videos/edit-video";
+import Link from 'next/link';
 
 // グローバルな型定義を追加
 declare global {
@@ -96,6 +98,12 @@ export default function CategoryDetailPage() {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [isVideoUploading, setIsVideoUploading] = useState(false);
   const [videoUploadProgress, setVideoUploadProgress] = useState(0);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [selectedVideo, setSelectedVideo] = useState<Video | null>(null);
+  const [videoToEdit, setVideoToEdit] = useState<Video | null>(null);
+  const [videoToDelete, setVideoToDelete] = useState<Video | null>(null);
+  const [isDeletingVideo, setIsDeletingVideo] = useState(false);
   const router = useRouter();
   const params = useParams();
   const supabase = createClientComponentClient();
@@ -160,34 +168,40 @@ export default function CategoryDetailPage() {
     fetchCategoryData();
   }, [params, supabase]);
 
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setSelectedFile(file);
+      const url = URL.createObjectURL(file);
+      setPreviewUrl(url);
+    }
+  };
+
   const handleUpload = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setIsUploading(true);
     setError(null);
     setUploadProgress(0);
 
-    const form = e.currentTarget;
-
     try {
       if (!params?.id) {
         throw new Error('カテゴリーIDが指定されていません');
       }
 
-      const formData = new FormData(form);
-      const file = formData.get('image') as File;
-      const title = formData.get('title') as string;
-
-      if (!file) {
+      if (!selectedFile) {
         throw new Error('ファイルが選択されていません');
       }
 
+      const formData = new FormData(e.currentTarget);
+      const title = formData.get('title') as string;
+
       // ファイルサイズのチェック（10MBまで）
-      if (file.size > 10 * 1024 * 1024) {
+      if (selectedFile.size > 10 * 1024 * 1024) {
         throw new Error('ファイルサイズは10MB以下にしてください');
       }
 
       // ファイルタイプのチェック
-      if (!file.type.startsWith('image/')) {
+      if (!selectedFile.type.startsWith('image/')) {
         throw new Error('画像ファイルを選択してください');
       }
 
@@ -199,21 +213,21 @@ export default function CategoryDetailPage() {
 
       // ファイル名を生成（ユーザーID/タイムスタンプ_元のファイル名）
       const timestamp = new Date().getTime();
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${user.id}/${timestamp}_${file.name}`;
+      const fileExt = selectedFile.name.split('.').pop();
+      const fileName = `${user.id}/${timestamp}_${selectedFile.name}`;
 
       // Supabase Storageにアップロード（進捗表示付き）
       const { data: uploadData, error: uploadError } = await supabase
         .storage
         .from('images')
-        .upload(fileName, file, {
+        .upload(fileName, selectedFile, {
           cacheControl: '3600',
           upsert: false,
           onUploadProgress: (progress: UploadProgressEvent) => {
             const percent = (progress.loaded / progress.total) * 100;
             setUploadProgress(Math.round(percent));
           },
-        } as any); // Supabaseの型定義に不足があるため、一時的にanyを使用
+        } as any);
 
       if (uploadError) {
         console.error('ストレージアップロードエラー:', uploadError);
@@ -241,8 +255,8 @@ export default function CategoryDetailPage() {
           title: title,
           url: publicUrl,
           file_name: fileName,
-          file_size: file.size,
-          mime_type: file.type
+          file_size: selectedFile.size,
+          mime_type: selectedFile.type
         });
 
       if (insertError) {
@@ -251,6 +265,9 @@ export default function CategoryDetailPage() {
       }
 
       // フォームをリセット
+      setSelectedFile(null);
+      setPreviewUrl(null);
+      const form = e.currentTarget as HTMLFormElement;
       if (form) {
         form.reset();
       }
@@ -282,12 +299,6 @@ export default function CategoryDetailPage() {
       
       if (error instanceof Error) {
         errorMessage = error.message;
-      } else if (typeof error === 'object' && error !== null) {
-        // Cloudinaryからのエラーレスポンスを確認
-        const cloudinaryError = error as { error?: { message?: string } };
-        if (cloudinaryError?.error?.message) {
-          errorMessage = `Cloudinaryエラー: ${cloudinaryError.error.message}`;
-        }
       }
       
       setError(errorMessage);
@@ -302,26 +313,28 @@ export default function CategoryDetailPage() {
     }
   };
 
-  const handleVideoUpload = async (e: React.FormEvent<HTMLFormElement>) => {
+  const handleVideoUpload = async (e: React.FormEvent<HTMLFormElement> | React.ChangeEvent<HTMLInputElement>) => {
     e.preventDefault();
+    
+    const fileInput = e.currentTarget as HTMLInputElement;
+    const file = fileInput.files?.[0];
+    
+    if (!file) {
+      toast({
+        title: "エラー",
+        description: "動画ファイルを選択してください",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setIsVideoUploading(true);
     setError(null);
     setVideoUploadProgress(0);
 
-    const form = e.currentTarget;
-
     try {
       if (!params?.id) {
         throw new Error('カテゴリーIDが指定されていません');
-      }
-
-      const formData = new FormData(form);
-      const file = formData.get('video') as File;
-      const title = formData.get('videoTitle') as string;
-      const description = formData.get('videoDescription') as string;
-
-      if (!file) {
-        throw new Error('ファイルが選択されていません');
       }
 
       // ファイルサイズのチェック（100MBまで）
@@ -352,8 +365,8 @@ export default function CategoryDetailPage() {
           category_id: params.id,
           url,
           public_id: publicId,
-          title: title || file.name,
-          description,
+          title: file.name,
+          description: '',
           file_name: file.name,
           file_size: file.size,
           file_type: file.type,
@@ -363,14 +376,9 @@ export default function CategoryDetailPage() {
 
       toast({
         title: "動画をアップロードしました",
-        description: `${title || file.name}をアップロードしました`,
+        description: `${file.name}をアップロードしました`,
         duration: 3000,
       });
-
-      // フォームをリセット
-      if (form) {
-        form.reset();
-      }
 
       // 動画一覧を更新
       const { data: videosData, error: videosError } = await supabase
@@ -497,6 +505,76 @@ export default function CategoryDetailPage() {
     } finally {
       setIsDeleting(false);
       setIsDeleteDialogOpen(false);
+    }
+  };
+
+  const handleVideoClick = (video: Video) => {
+    setSelectedVideo(video);
+  };
+
+  const handleCloseVideoDialog = () => {
+    setSelectedVideo(null);
+  };
+
+  const handleVideoEnded = () => {
+    // 動画再生終了後、3秒後に閉じる
+    setTimeout(() => {
+      setSelectedVideo(null);
+    }, 3000);
+  };
+
+  const handleDeleteVideo = async () => {
+    if (!videoToDelete) return;
+
+    setIsDeletingVideo(true);
+    try {
+      // 現在のユーザーIDを取得
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        throw new Error('ユーザーが認証されていません');
+      }
+
+      // Cloudinaryから動画を削除
+      const response = await fetch(`/api/videos/${videoToDelete.id}`, {
+        method: "DELETE",
+      });
+
+      if (!response.ok) {
+        throw new Error("動画の削除に失敗しました");
+      }
+
+      toast({
+        title: "動画を削除しました",
+        description: `${videoToDelete.title}を削除しました`,
+        duration: 3000,
+      });
+
+      // 動画一覧を更新
+      const { data: videosData, error: videosError } = await supabase
+        .from('videos')
+        .select('*')
+        .eq('category_id', params.id)
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false });
+
+      if (videosError) throw videosError;
+      setVideos(videosData || []);
+
+      // 3秒後にダッシュボードにリダイレクト
+      setTimeout(() => {
+        router.push("/dashboard");
+      }, 3000);
+
+    } catch (error) {
+      console.error("動画削除エラー:", error);
+      toast({
+        title: "エラー",
+        description: "動画の削除に失敗しました",
+        variant: "destructive",
+      });
+    } finally {
+      setIsDeletingVideo(false);
+      setVideoToDelete(null);
     }
   };
 
@@ -631,14 +709,57 @@ export default function CategoryDetailPage() {
                       </div>
                       <div className="space-y-2">
                         <Label htmlFor="image">画像ファイル</Label>
-                        <Input
-                          id="image"
-                          name="image"
-                          type="file"
-                          accept="image/*"
-                          required
-                          disabled={isUploading}
-                        />
+                        <div className="flex items-center justify-center w-full">
+                          <label
+                            htmlFor="image"
+                            className="flex flex-col items-center justify-center w-full h-32 border-2 border-gray-300 border-dashed rounded-lg cursor-pointer hover:bg-gray-50"
+                          >
+                            {previewUrl ? (
+                              <div className="relative w-full h-full">
+                                <Image
+                                  src={previewUrl}
+                                  alt="プレビュー"
+                                  fill
+                                  className="object-contain"
+                                />
+                              </div>
+                            ) : (
+                              <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                                <svg
+                                  className="w-8 h-8 mb-4 text-gray-500"
+                                  aria-hidden="true"
+                                  xmlns="http://www.w3.org/2000/svg"
+                                  fill="none"
+                                  viewBox="0 0 20 16"
+                                >
+                                  <path
+                                    stroke="currentColor"
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth="2"
+                                    d="M13 13h3a3 3 0 0 0 0-6h-.025A5.56 5.56 0 0 0 16 6.5 5.5 5.5 0 0 0 5.207 5.021C5.137 5.017 5.071 5 5 5a4 4 0 0 0 0 8h2.167M10 15V6m0 0L8 8m2-2 2 2"
+                                  />
+                                </svg>
+                                <p className="mb-2 text-sm text-gray-500">
+                                  <span className="font-semibold">クリックして画像をアップロード</span>
+                                </p>
+                                <p className="text-xs text-gray-500">
+                                  PNG, JPG, GIF (最大10MB)
+                                </p>
+                              </div>
+                            )}
+                            <input
+                              id="image"
+                              name="image"
+                              type="file"
+                              className="hidden"
+                              accept="image/*"
+                              required
+                              disabled={isUploading}
+                              onChange={handleFileChange}
+                            />
+                          </label>
+                        </div>
                       </div>
                       {isUploading && (
                         <div className="space-y-2">
@@ -673,38 +794,42 @@ export default function CategoryDetailPage() {
 
                   <TabsContent value="video">
                     <form onSubmit={handleVideoUpload} className="space-y-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="videoTitle">タイトル</Label>
-                        <Input
-                          id="videoTitle"
-                          name="videoTitle"
-                          placeholder="動画のタイトルを入力"
-                          required
-                          disabled={isVideoUploading}
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="videoDescription">説明</Label>
-                        <Input
-                          id="videoDescription"
-                          name="videoDescription"
-                          placeholder="動画の説明を入力"
-                          disabled={isVideoUploading}
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="video">動画ファイル</Label>
-                        <Input
-                          id="video"
-                          name="video"
-                          type="file"
-                          accept="video/mp4,video/quicktime,video/x-msvideo"
-                          required
-                          disabled={isVideoUploading}
-                        />
-                        <p className="text-sm text-gray-500">
-                          対応形式: MP4, MOV, AVI (最大100MB)
-                        </p>
+                      <div className="flex items-center justify-center w-full">
+                        <label
+                          htmlFor="video-upload"
+                          className="flex flex-col items-center justify-center w-full h-64 border-2 border-gray-300 border-dashed rounded-lg cursor-pointer hover:bg-gray-50"
+                        >
+                          <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                            <svg
+                              className="w-8 h-8 mb-4 text-gray-500"
+                              aria-hidden="true"
+                              xmlns="http://www.w3.org/2000/svg"
+                              fill="none"
+                              viewBox="0 0 20 16"
+                            >
+                              <path
+                                stroke="currentColor"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth="2"
+                                d="M13 13h3a3 3 0 0 0 0-6h-.025A5.56 5.56 0 0 0 16 6.5 5.5 5.5 0 0 0 5.207 5.021C5.137 5.017 5.071 5 5 5a4 4 0 0 0 0 8h2.167M10 15V6m0 0L8 8m2-2 2 2"
+                              />
+                            </svg>
+                            <p className="mb-2 text-sm text-gray-500">
+                              <span className="font-semibold">クリックして動画をアップロード</span>
+                            </p>
+                            <p className="text-xs text-gray-500">
+                              MP4, MOV, AVI (最大100MB)
+                            </p>
+                          </div>
+                          <input
+                            id="video-upload"
+                            type="file"
+                            className="hidden"
+                            accept="video/mp4,video/quicktime,video/avi"
+                            onChange={handleVideoUpload}
+                          />
+                        </label>
                       </div>
                       {isVideoUploading && (
                         <div className="space-y-2">
@@ -785,6 +910,51 @@ export default function CategoryDetailPage() {
                 </div>
               </CardContent>
             </Card>
+
+            {/* 動画管理カード */}
+            <Card>
+              <CardHeader>
+                <CardTitle>動画の管理</CardTitle>
+                <CardDescription>
+                  動画の編集や削除を行います
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {videos.map((video) => (
+                    <div key={video.id} className="flex items-center justify-between p-2 border rounded-lg">
+                      <div className="flex items-center space-x-2">
+                        <div className="w-12 h-12 relative rounded overflow-hidden">
+                          <video
+                            src={video.url}
+                            className="object-cover w-full h-full"
+                            preload="metadata"
+                          />
+                        </div>
+                        <div className="truncate">
+                          <p className="font-medium truncate">{video.title}</p>
+                          <p className="text-sm text-gray-500">
+                            {new Date(video.created_at).toLocaleDateString('ja-JP')}
+                          </p>
+                        </div>
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        onClick={() => router.push(`/dashboard/categories/${category?.id}/videos/${video.id}/edit`)}
+                      >
+                        <Edit className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ))}
+                  {videos.length === 0 && (
+                    <div className="text-center py-4 text-gray-500">
+                      動画がありません
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
           </div>
         </div>
 
@@ -855,10 +1025,10 @@ export default function CategoryDetailPage() {
                         <div
                           key={video.id}
                           className="group relative aspect-square overflow-hidden rounded-lg border bg-muted cursor-pointer"
+                          onClick={() => handleVideoClick(video)}
                         >
-                          {/* サンプル画像を使用 */}
                           <Image
-                            src="/sample-video-thumbnail.jpg"
+                            src={`https://res.cloudinary.com/${process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME}/video/upload/so_1/${video.public_id}.jpg`}
                             alt={video.title}
                             fill
                             className="object-cover transition-transform group-hover:scale-105"
@@ -908,6 +1078,31 @@ export default function CategoryDetailPage() {
         </DialogContent>
       </Dialog>
 
+      {/* 動画ポップアップダイアログ */}
+      <Dialog open={!!selectedVideo} onOpenChange={handleCloseVideoDialog}>
+        <DialogContent className="max-w-4xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Volume2 className="h-5 w-5" />
+              {selectedVideo?.title}
+            </DialogTitle>
+          </DialogHeader>
+          {selectedVideo && (
+            <div className="relative aspect-video w-full">
+              <video
+                src={selectedVideo.url}
+                controls
+                className="w-full h-full"
+                autoPlay
+                onEnded={handleVideoEnded}
+              >
+                お使いのブラウザは動画の再生をサポートしていません。
+              </video>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
       {/* 削除確認ダイアログ */}
       <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
         <DialogContent>
@@ -942,6 +1137,44 @@ export default function CategoryDetailPage() {
               disabled={isDeleting}
             >
               {isDeleting ? "削除中..." : "削除する"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 動画編集ダイアログ */}
+      <Dialog open={!!videoToEdit} onOpenChange={() => setVideoToEdit(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>動画を編集</DialogTitle>
+          </DialogHeader>
+          {videoToEdit && <EditVideo video={videoToEdit} onClose={() => setVideoToEdit(null)} />}
+        </DialogContent>
+      </Dialog>
+
+      {/* 動画削除確認ダイアログ */}
+      <Dialog open={!!videoToDelete} onOpenChange={() => setVideoToDelete(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>動画を削除</DialogTitle>
+            <DialogDescription>
+              この動画を削除しますか？この操作は取り消せません。
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setVideoToDelete(null)}
+              disabled={isDeletingVideo}
+            >
+              キャンセル
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleDeleteVideo}
+              disabled={isDeletingVideo}
+            >
+              {isDeletingVideo ? "削除中..." : "削除"}
             </Button>
           </DialogFooter>
         </DialogContent>
