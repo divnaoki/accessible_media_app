@@ -46,16 +46,12 @@ export function EditVideo({ video, onClose }: EditVideoProps) {
 
       if (error) throw error;
 
-      toast({
-        description: `${title}を更新しました`,
-      });
+      toast.success(`${title}を更新しました`);
       router.push(`/dashboard/categories/${video.category_id}`);
       router.refresh();
     } catch (error) {
       console.error('更新エラー:', error);
-      toast({
-        description: '動画の更新に失敗しました',
-      });
+      toast.error('動画の更新に失敗しました');
     } finally {
       setIsSubmitting(false);
     }
@@ -74,10 +70,7 @@ export function EditVideo({ video, onClose }: EditVideoProps) {
       }
 
       // Cloudinaryから動画を削除
-      const deleteResponse = await deleteVideo(video.public_id);
-      if (!deleteResponse.success) {
-        throw new Error('Cloudinaryからの動画削除に失敗しました');
-      }
+      await deleteVideo(video.public_id);
 
       // Supabaseから動画を削除
       const { error: deleteError } = await supabase
@@ -91,19 +84,15 @@ export function EditVideo({ video, onClose }: EditVideoProps) {
         throw new Error(`Supabaseからの動画削除に失敗しました: ${deleteError.message}`);
       }
 
-      toast({
-        description: '動画を削除しました',
-      });
+      toast.success('動画を削除しました');
       
       // カテゴリ詳細ページに戻る
       router.push(`/dashboard/categories/${video.category_id}`);
       // ページを再読み込み
       router.refresh();
     } catch (error) {
-      console.error('動画削除エラー:', error);
-      toast({
-        description: error instanceof Error ? error.message : '動画の削除に失敗しました',
-      });
+      console.error('Error deleting video:', error);
+      toast.error('動画の削除に失敗しました');
     } finally {
       setIsDeleting(false);
     }
