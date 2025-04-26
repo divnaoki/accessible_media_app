@@ -18,6 +18,7 @@ export function EditVideo({ video, onClose }: EditVideoProps) {
   const [title, setTitle] = useState(video.title);
   const [description, setDescription] = useState(video.description || "");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const router = useRouter();
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
