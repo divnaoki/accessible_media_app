@@ -143,15 +143,16 @@ export default function EditVideoPage() {
       const { error } = await supabase
         .from('videos')
         .update({
-          title: video.title,
-          description: video.description,
+          title,
+          description,
+          updated_at: new Date().toISOString(),
         })
         .eq('id', video.id)
         .eq('user_id', user.id);
 
       if (error) throw error;
 
-      toast.success('動画を更新しました');
+      toast.success(`${title}を更新しました`);
       router.push(`/dashboard/categories/${params.id}`);
       router.refresh();
     } catch (error) {
