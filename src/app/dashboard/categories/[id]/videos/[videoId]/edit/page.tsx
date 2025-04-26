@@ -31,7 +31,7 @@ export default function EditVideoPage() {
           throw new Error('ユーザーが認証されていません');
         }
 
-        const { data, error } = await supabase
+        const { data: videoData, error } = await supabase
           .from('videos')
           .select('*')
           .eq('id', params.videoId)
@@ -39,26 +39,21 @@ export default function EditVideoPage() {
           .single();
 
         if (error) throw error;
-        if (!data) {
+        if (!videoData) {
           throw new Error('動画が見つかりません');
         }
 
-        setVideo(data);
-        setTitle(data.title);
-        setDescription(data.description || '');
+        setVideo(videoData);
+        setTitle(videoData.title);
+        setDescription(videoData.description || '');
       } catch (error) {
         console.error('動画取得エラー:', error);
-        toast({
-          title: 'エラー',
-          description: '動画の取得に失敗しました',
-          variant: 'destructive',
-        });
-        router.push('/dashboard');
+        toast.error('動画の取得に失敗しました');
       }
     };
 
     fetchVideo();
-  }, [params.videoId, supabase, router]);
+  }, [params.videoId, supabase]);
 
   const handleVideoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -141,11 +136,13 @@ export default function EditVideoPage() {
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setIsSubmitting(true);
 
     try {
+      if (!video) return;
+
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
         throw new Error('ユーザーが認証されていません');
@@ -154,33 +151,20 @@ export default function EditVideoPage() {
       const { error } = await supabase
         .from('videos')
         .update({
-          title,
-          description,
-          updated_at: new Date().toISOString(),
+          title: video.title,
+          description: video.description,
         })
-        .eq('id', params.videoId)
+        .eq('id', video.id)
         .eq('user_id', user.id);
 
       if (error) throw error;
 
-      toast({
-        title: "動画を更新しました",
-        description: `${title}を更新しました`,
-        duration: 3000,
-      });
-
-      // 3秒後にカテゴリーページにリダイレクト
-      setTimeout(() => {
-        router.push(`/dashboard/categories/${params.id}`);
-      }, 3000);
-
+      toast.success('動画を更新しました');
+      router.push(`/dashboard/categories/${params.id}`);
+      router.refresh();
     } catch (error) {
       console.error('更新エラー:', error);
-      toast({
-        title: "エラー",
-        description: "動画の更新に失敗しました",
-        variant: "destructive",
-      });
+      toast.error('動画の更新に失敗しました');
     } finally {
       setIsSubmitting(false);
     }
@@ -191,26 +175,8 @@ export default function EditVideoPage() {
 
     try {
       setIsDeleting(true);
-      
-      // 現在のユーザーIDを取得
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        throw new Error('ユーザーが認証されていません');
-      }
-
-      // Cloudinaryから動画を削除
       await deleteVideo(video.public_id);
-
-      // Supabaseから動画を削除
-      const { error } = await supabase
-        .from('videos')
-        .delete()
-        .eq('id', video.id)
-        .eq('user_id', user.id);
-
-      if (error) throw error;
-
-      toast.success('ビデオを削除しました');
+      toast.success('動画を削除しました');
       
       // カテゴリ詳細ページに戻る
       router.push(`/dashboard/categories/${params.id}`);
@@ -218,7 +184,7 @@ export default function EditVideoPage() {
       router.refresh();
     } catch (error) {
       console.error('Error deleting video:', error);
-      toast.error('ビデオの削除に失敗しました');
+      toast.error('動画の削除に失敗しました');
     } finally {
       setIsDeleting(false);
     }
