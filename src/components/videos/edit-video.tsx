@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
+import { supabase } from "@/lib/supabase";
 
 interface EditVideoProps {
   video: Video;
@@ -19,49 +20,57 @@ export function EditVideo({ video, onClose }: EditVideoProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const router = useRouter();
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setIsSubmitting(true);
 
     try {
-      const response = await fetch(`/api/videos/${video.id}`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          title,
-          description,
-        }),
-      });
+      if (!video) return;
 
-      if (!response.ok) {
-        throw new Error("動画の更新に失敗しました");
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        throw new Error('ユーザーが認証されていません');
       }
 
-      toast({
-        title: "動画を更新しました",
-        description: `${title}を更新しました`,
-        duration: 3000,
-      });
+      const { error } = await supabase
+        .from('videos')
+        .update({
+          title: video.title,
+          description: video.description,
+        })
+        .eq('id', video.id)
+        .eq('user_id', user.id);
 
-      // ページを更新
+      if (error) throw error;
+
+      toast.success(`${video.title}を更新しました`);
+      router.push(`/dashboard/categories/${video.categoryId}`);
       router.refresh();
-      
-      // 3秒後にダッシュボードにリダイレクト
-      setTimeout(() => {
-        router.push("/dashboard");
-      }, 3000);
-
     } catch (error) {
-      console.error("動画更新エラー:", error);
-      toast({
-        title: "エラー",
-        description: "動画の更新に失敗しました",
-        variant: "destructive",
-      });
+      console.error('更新エラー:', error);
+      toast.error('動画の更新に失敗しました');
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!video) return;
+
+    try {
+      setIsDeleting(true);
+      await deleteVideo(video.public_id);
+      toast.success('動画を削除しました');
+      
+      // カテゴリ詳細ページに戻る
+      router.push(`/dashboard/categories/${video.categoryId}`);
+      // ページを再読み込み
+      router.refresh();
+    } catch (error) {
+      console.error('Error deleting video:', error);
+      toast.error('動画の削除に失敗しました');
+    } finally {
+      setIsDeleting(false);
     }
   };
 

@@ -289,8 +289,7 @@ export default function CategoryDetailPage() {
 
       // 成功時の処理
       toast({
-        title: 'アップロード完了',
-        description: '画像のアップロードが完了しました。',
+        description: '画像のアップロードが完了しました',
       });
 
     } catch (error) {
@@ -303,9 +302,7 @@ export default function CategoryDetailPage() {
       
       setError(errorMessage);
       toast({
-        title: 'アップロードエラー',
         description: errorMessage,
-        variant: 'destructive',
       });
     } finally {
       setIsUploading(false);
@@ -321,9 +318,7 @@ export default function CategoryDetailPage() {
     
     if (!file) {
       toast({
-        title: 'エラー',
         description: '動画ファイルを選択してください',
-        variant: 'destructive',
       });
       return;
     }
@@ -375,7 +370,6 @@ export default function CategoryDetailPage() {
       if (insertError) throw insertError;
 
       toast({
-        title: 'アップロード完了',
         description: `${file.name}をアップロードしました`,
       });
 
@@ -400,9 +394,7 @@ export default function CategoryDetailPage() {
       
       setError(errorMessage);
       toast({
-        title: 'アップロードエラー',
         description: errorMessage,
-        variant: 'destructive',
       });
     } finally {
       setIsVideoUploading(false);
@@ -480,7 +472,6 @@ export default function CategoryDetailPage() {
       if (deleteError) throw deleteError;
 
       toast({
-        title: '削除完了',
         description: 'カテゴリーを削除しました',
       });
 
@@ -491,9 +482,7 @@ export default function CategoryDetailPage() {
     } catch (error) {
       console.error('Delete error:', error);
       toast({
-        title: 'エラー',
-        description: error instanceof Error ? error.message : 'カテゴリーの削除に失敗しました',
-        variant: 'destructive',
+        description: 'カテゴリーの削除に失敗しました',
       });
     } finally {
       setIsDeleting(false);
@@ -537,7 +526,6 @@ export default function CategoryDetailPage() {
       }
 
       toast({
-        title: '削除完了',
         description: `${videoToDelete.title}を削除しました`,
       });
 
@@ -560,9 +548,7 @@ export default function CategoryDetailPage() {
     } catch (error) {
       console.error("動画削除エラー:", error);
       toast({
-        title: 'エラー',
         description: '動画の削除に失敗しました',
-        variant: 'destructive',
       });
     } finally {
       setIsDeletingVideo(false);
