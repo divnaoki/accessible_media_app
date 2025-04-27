@@ -8,7 +8,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { FolderPlus, ImageIcon, Plus, Pencil } from "lucide-react";
+import { FolderPlus, ImageIcon, Plus, Pencil, VideoIcon } from "lucide-react";
 import Link from "next/link";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 import { useEffect, useState } from "react";
@@ -21,6 +21,7 @@ type Category = {
   user_id: string;
   name: string;
   description: string | null;
+  media_type: 'image' | 'video';
   display_order: number;
   created_at: string;
   updated_at: string;
@@ -113,7 +114,11 @@ export default function DashboardPage() {
               <Link href={`/dashboard/categories/${category.id}`}>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
-                    <ImageIcon className="h-5 w-5" />
+                    {category.media_type === 'image' ? (
+                      <ImageIcon className="h-5 w-5" />
+                    ) : (
+                      <VideoIcon className="h-5 w-5" />
+                    )}
                     {category.name}
                   </CardTitle>
                   <CardDescription>{category.description}</CardDescription>

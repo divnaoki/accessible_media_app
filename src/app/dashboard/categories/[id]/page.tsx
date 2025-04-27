@@ -43,6 +43,7 @@ type Category = {
   user_id: string;
   name: string;
   description: string | null;
+  media_type: 'image' | 'video';
   display_order: number;
   created_at: string;
   updated_at: string;
@@ -104,6 +105,7 @@ export default function CategoryDetailPage() {
   const [videoToEdit, setVideoToEdit] = useState<Video | null>(null);
   const [videoToDelete, setVideoToDelete] = useState<Video | null>(null);
   const [isDeletingVideo, setIsDeletingVideo] = useState(false);
+  const [user, setUser] = useState<any>(null);
   const router = useRouter();
   const params = useParams();
   const supabase = createClientComponentClient();
@@ -121,6 +123,7 @@ export default function CategoryDetailPage() {
         if (!user) {
           throw new Error('ユーザーが認証されていません');
         }
+        setUser(user);
 
         const { data: categoryData, error: categoryError } = await supabase
           .from('categories')
@@ -556,6 +559,38 @@ export default function CategoryDetailPage() {
     }
   };
 
+  const handleDeleteImage = async (imageId: string) => {
+    try {
+      const { error } = await supabase
+        .from('images')
+        .delete()
+        .eq('id', imageId);
+
+      if (error) throw error;
+
+      // 画像一覧を更新
+      const { data: imagesData, error: imagesError } = await supabase
+        .from('images')
+        .select('*')
+        .eq('category_id', params.id)
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false });
+
+      if (imagesError) throw imagesError;
+      setImages(imagesData || []);
+
+      toast({
+        description: '画像を削除しました',
+      });
+    } catch (error) {
+      console.error('Error deleting image:', error);
+      toast({
+        description: '画像の削除に失敗しました',
+        variant: 'destructive',
+      });
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center">
@@ -638,7 +673,11 @@ export default function CategoryDetailPage() {
               <CardHeader>
                 <CardTitle className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <ImageIcon className="h-5 w-5" />
+                    {category.media_type === 'image' ? (
+                      <ImageIcon className="h-5 w-5" />
+                    ) : (
+                      <VideoIcon className="h-5 w-5" />
+                    )}
                     {category.name}
                   </div>
                   <Button
@@ -661,276 +700,250 @@ export default function CategoryDetailPage() {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <Tabs defaultValue="image" className="space-y-4">
-                  <TabsList className="grid w-full grid-cols-2">
-                    <TabsTrigger value="image" className="flex items-center gap-2">
-                      <ImageIcon className="h-4 w-4" />
-                      画像
-                    </TabsTrigger>
-                    <TabsTrigger value="video" className="flex items-center gap-2">
-                      <VideoIcon className="h-4 w-4" />
-                      動画
-                    </TabsTrigger>
-                  </TabsList>
-
-                  <TabsContent value="image">
-                    <form onSubmit={handleUpload} className="space-y-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="title">タイトル</Label>
-                        <Input
-                          id="title"
-                          name="title"
-                          placeholder="画像のタイトルを入力"
-                          required
-                          disabled={isUploading}
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="image">画像ファイル</Label>
-                        <div className="flex items-center justify-center w-full">
-                          <label
-                            htmlFor="image"
-                            className="flex flex-col items-center justify-center w-full h-32 border-2 border-gray-300 border-dashed rounded-lg cursor-pointer hover:bg-gray-50"
-                          >
-                            {previewUrl ? (
-                              <div className="relative w-full h-full">
-                                <Image
-                                  src={previewUrl}
-                                  alt="プレビュー"
-                                  fill
-                                  className="object-contain"
-                                />
-                              </div>
-                            ) : (
-                              <div className="flex flex-col items-center justify-center pt-5 pb-6">
-                                <svg
-                                  className="w-8 h-8 mb-4 text-gray-500"
-                                  aria-hidden="true"
-                                  xmlns="http://www.w3.org/2000/svg"
-                                  fill="none"
-                                  viewBox="0 0 20 16"
-                                >
-                                  <path
-                                    stroke="currentColor"
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                    strokeWidth="2"
-                                    d="M13 13h3a3 3 0 0 0 0-6h-.025A5.56 5.56 0 0 0 16 6.5 5.5 5.5 0 0 0 5.207 5.021C5.137 5.017 5.071 5 5 5a4 4 0 0 0 0 8h2.167M10 15V6m0 0L8 8m2-2 2 2"
-                                  />
-                                </svg>
-                                <p className="mb-2 text-sm text-gray-500">
-                                  <span className="font-semibold">クリックして画像をアップロード</span>
-                                </p>
-                                <p className="text-xs text-gray-500">
-                                  PNG, JPG, GIF (最大10MB)
-                                </p>
-                              </div>
-                            )}
-                            <input
-                              id="image"
-                              name="image"
-                              type="file"
-                              className="hidden"
-                              accept="image/*"
-                              required
-                              disabled={isUploading}
-                              onChange={handleFileChange}
-                            />
-                          </label>
-                        </div>
-                      </div>
-                      {isUploading && (
-                        <div className="space-y-2">
-                          <div className="text-sm text-gray-500">
-                            アップロード中... {uploadProgress}%
-                          </div>
-                          <Progress value={uploadProgress} className="w-full" />
-                        </div>
-                      )}
-                      {error && (
-                        <div className="text-red-500 text-sm">{error}</div>
-                      )}
-                      <Button
-                        type="submit"
-                        className="w-full"
+                {category.media_type === 'image' ? (
+                  <form onSubmit={handleUpload} className="space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="title">タイトル</Label>
+                      <Input
+                        id="title"
+                        name="title"
+                        placeholder="画像のタイトルを入力"
+                        required
                         disabled={isUploading}
-                      >
-                        {isUploading ? (
-                          <div className="flex items-center">
-                            <Upload className="mr-2 h-4 w-4" />
-                            アップロード中...
-                          </div>
-                        ) : (
-                          <div className="flex items-center">
-                            <Upload className="mr-2 h-4 w-4" />
-                            アップロード
-                          </div>
-                        )}
-                      </Button>
-                    </form>
-                  </TabsContent>
-
-                  <TabsContent value="video">
-                    <form onSubmit={handleVideoUpload} className="space-y-4">
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="image">画像ファイル</Label>
                       <div className="flex items-center justify-center w-full">
                         <label
-                          htmlFor="video-upload"
-                          className="flex flex-col items-center justify-center w-full h-64 border-2 border-gray-300 border-dashed rounded-lg cursor-pointer hover:bg-gray-50"
+                          htmlFor="image"
+                          className="flex flex-col items-center justify-center w-full h-32 border-2 border-gray-300 border-dashed rounded-lg cursor-pointer hover:bg-gray-50"
                         >
-                          <div className="flex flex-col items-center justify-center pt-5 pb-6">
-                            <svg
-                              className="w-8 h-8 mb-4 text-gray-500"
-                              aria-hidden="true"
-                              xmlns="http://www.w3.org/2000/svg"
-                              fill="none"
-                              viewBox="0 0 20 16"
-                            >
-                              <path
-                                stroke="currentColor"
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth="2"
-                                d="M13 13h3a3 3 0 0 0 0-6h-.025A5.56 5.56 0 0 0 16 6.5 5.5 5.5 0 0 0 5.207 5.021C5.137 5.017 5.071 5 5 5a4 4 0 0 0 0 8h2.167M10 15V6m0 0L8 8m2-2 2 2"
+                          {previewUrl ? (
+                            <div className="relative w-full h-full">
+                              <Image
+                                src={previewUrl}
+                                alt="プレビュー"
+                                fill
+                                className="object-contain"
                               />
-                            </svg>
-                            <p className="mb-2 text-sm text-gray-500">
-                              <span className="font-semibold">クリックして動画をアップロード</span>
-                            </p>
-                            <p className="text-xs text-gray-500">
-                              MP4, MOV, AVI (最大100MB)
-                            </p>
-                          </div>
+                            </div>
+                          ) : (
+                            <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                              <svg
+                                className="w-8 h-8 mb-4 text-gray-500"
+                                aria-hidden="true"
+                                xmlns="http://www.w3.org/2000/svg"
+                                fill="none"
+                                viewBox="0 0 20 16"
+                              >
+                                <path
+                                  stroke="currentColor"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth="2"
+                                  d="M13 13h3a3 3 0 0 0 0-6h-.025A5.56 5.56 0 0 0 16 6.5 5.5 5.5 0 0 0 5.207 5.021C5.137 5.017 5.071 5 5 5a4 4 0 0 0 0 8h2.167M10 15V6m0 0L8 8m2-2 2 2"
+                                />
+                              </svg>
+                              <p className="mb-2 text-sm text-gray-500">
+                                <span className="font-semibold">クリックして画像をアップロード</span>
+                              </p>
+                              <p className="text-xs text-gray-500">
+                                PNG, JPG, GIF (最大10MB)
+                              </p>
+                            </div>
+                          )}
                           <input
-                            id="video-upload"
+                            id="image"
+                            name="image"
                             type="file"
                             className="hidden"
-                            accept="video/mp4,video/quicktime,video/avi"
-                            onChange={handleVideoUpload}
+                            accept="image/*"
+                            required
+                            disabled={isUploading}
+                            onChange={handleFileChange}
                           />
                         </label>
                       </div>
-                      {isVideoUploading && (
-                        <div className="space-y-2">
-                          <div className="text-sm text-gray-500">
-                            アップロード中... {videoUploadProgress}%
-                          </div>
-                          <Progress value={videoUploadProgress} className="w-full" />
+                    </div>
+                    {isUploading && (
+                      <div className="space-y-2">
+                        <div className="text-sm text-gray-500">
+                          アップロード中... {uploadProgress}%
+                        </div>
+                        <Progress value={uploadProgress} className="w-full" />
+                      </div>
+                    )}
+                    {error && (
+                      <div className="text-red-500 text-sm">{error}</div>
+                    )}
+                    <Button
+                      type="submit"
+                      className="w-full"
+                      disabled={isUploading}
+                    >
+                      {isUploading ? (
+                        <div className="flex items-center">
+                          <Upload className="mr-2 h-4 w-4" />
+                          アップロード中...
+                        </div>
+                      ) : (
+                        <div className="flex items-center">
+                          <Upload className="mr-2 h-4 w-4" />
+                          アップロード
                         </div>
                       )}
-                      {error && (
-                        <div className="text-red-500 text-sm">{error}</div>
-                      )}
-                      <Button
-                        type="submit"
-                        className="w-full"
-                        disabled={isVideoUploading}
+                    </Button>
+                  </form>
+                ) : (
+                  <form onSubmit={handleVideoUpload} className="space-y-4">
+                    <div className="flex items-center justify-center w-full">
+                      <label
+                        htmlFor="video-upload"
+                        className="flex flex-col items-center justify-center w-full h-64 border-2 border-gray-300 border-dashed rounded-lg cursor-pointer hover:bg-gray-50"
                       >
-                        {isVideoUploading ? (
-                          <div className="flex items-center">
-                            <Upload className="mr-2 h-4 w-4 animate-spin" />
-                            アップロード中...
-                          </div>
-                        ) : (
-                          <div className="flex items-center">
-                            <Upload className="mr-2 h-4 w-4" />
-                            アップロード
-                          </div>
-                        )}
-                      </Button>
-                    </form>
-                  </TabsContent>
-                </Tabs>
+                        <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                          <svg
+                            className="w-8 h-8 mb-4 text-gray-500"
+                            aria-hidden="true"
+                            xmlns="http://www.w3.org/2000/svg"
+                            fill="none"
+                            viewBox="0 0 20 16"
+                          >
+                            <path
+                              stroke="currentColor"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth="2"
+                              d="M13 13h3a3 3 0 0 0 0-6h-.025A5.56 5.56 0 0 0 16 6.5 5.5 5.5 0 0 0 5.207 5.021C5.137 5.017 5.071 5 5 5a4 4 0 0 0 0 8h2.167M10 15V6m0 0L8 8m2-2 2 2"
+                            />
+                          </svg>
+                          <p className="mb-2 text-sm text-gray-500">
+                            <span className="font-semibold">クリックして動画をアップロード</span>
+                          </p>
+                          <p className="text-xs text-gray-500">
+                            MP4, MOV, AVI (最大100MB)
+                          </p>
+                        </div>
+                        <input
+                          id="video-upload"
+                          type="file"
+                          className="hidden"
+                          accept="video/mp4,video/quicktime,video/avi"
+                          onChange={handleVideoUpload}
+                        />
+                      </label>
+                    </div>
+                    {isVideoUploading && (
+                      <div className="space-y-2">
+                        <div className="text-sm text-gray-500">
+                          アップロード中... {videoUploadProgress}%
+                        </div>
+                        <Progress value={videoUploadProgress} className="w-full" />
+                      </div>
+                    )}
+                    {error && (
+                      <div className="text-red-500 text-sm">{error}</div>
+                    )}
+                    <Button
+                      type="submit"
+                      className="w-full"
+                      disabled={isVideoUploading}
+                    >
+                      {isVideoUploading ? (
+                        <div className="flex items-center">
+                          <Upload className="mr-2 h-4 w-4 animate-spin" />
+                          アップロード中...
+                        </div>
+                      ) : (
+                        <div className="flex items-center">
+                          <Upload className="mr-2 h-4 w-4" />
+                          アップロード
+                        </div>
+                      )}
+                    </Button>
+                  </form>
+                )}
               </CardContent>
             </Card>
 
-            {/* 画像編集カード */}
             <Card>
               <CardHeader>
-                <CardTitle>画像の管理</CardTitle>
-                <CardDescription>
-                  画像の編集や削除を行います
-                </CardDescription>
+                <CardTitle>
+                  {category.media_type === 'image' ? '画像一覧' : '動画一覧'}
+                </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="space-y-4">
-                  {images.map((image) => (
-                    <div key={image.id} className="flex items-center justify-between p-2 border rounded-lg">
-                      <div className="flex items-center space-x-2">
-                        <div className="w-12 h-12 relative rounded overflow-hidden">
-                          <Image
-                            src={image.url}
-                            alt={image.title}
-                            fill
-                            className="object-cover"
-                          />
+                {category.media_type === 'image' ? (
+                  <div className="space-y-4">
+                    {images.map((image) => (
+                      <div key={image.id} className="flex items-center justify-between p-2 border rounded-lg">
+                        <div className="flex items-center space-x-2">
+                          <div className="w-12 h-12 relative rounded overflow-hidden">
+                            <Image
+                              src={image.url}
+                              alt={image.title}
+                              fill
+                              className="object-cover"
+                            />
+                          </div>
+                          <div className="truncate">
+                            <p className="font-medium truncate">{image.title}</p>
+                            <p className="text-sm text-gray-500">
+                              {new Date(image.created_at).toLocaleDateString('ja-JP')}
+                            </p>
+                          </div>
                         </div>
-                        <div className="truncate">
-                          <p className="font-medium truncate">{image.title}</p>
-                          <p className="text-sm text-gray-500">
-                            {new Date(image.created_at).toLocaleDateString('ja-JP')}
-                          </p>
-                        </div>
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          onClick={() => router.push(`/dashboard/categories/${category?.id}/images/${image.id}/edit`)}
+                        >
+                          <Edit className="h-4 w-4" />
+                        </Button>
                       </div>
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        onClick={() => router.push(`/dashboard/categories/${category?.id}/images/${image.id}/edit`)}
-                      >
-                        <Edit className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  ))}
-                  {images.length === 0 && (
-                    <div className="text-center py-4 text-gray-500">
-                      画像がありません
-                    </div>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* 動画管理カード */}
-            <Card>
-              <CardHeader>
-                <CardTitle>動画の管理</CardTitle>
-                <CardDescription>
-                  動画の編集や削除を行います
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {videos.map((video) => (
-                    <div key={video.id} className="flex items-center justify-between p-2 border rounded-lg">
-                      <div className="flex items-center space-x-2">
-                        <div className="w-12 h-12 relative rounded overflow-hidden">
-                          <video
-                            src={video.url}
-                            className="object-cover w-full h-full"
-                            preload="metadata"
-                          />
-                        </div>
-                        <div className="truncate">
-                          <p className="font-medium truncate">{video.title}</p>
-                          <p className="text-sm text-gray-500">
-                            {new Date(video.created_at).toLocaleDateString('ja-JP')}
-                          </p>
-                        </div>
+                    ))}
+                    {images.length === 0 && (
+                      <div className="text-center py-4 text-gray-500">
+                        画像がありません
                       </div>
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        onClick={() => router.push(`/dashboard/categories/${category?.id}/videos/${video.id}/edit`)}
-                      >
-                        <Edit className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  ))}
-                  {videos.length === 0 && (
-                    <div className="text-center py-4 text-gray-500">
-                      動画がありません
-                    </div>
-                  )}
-                </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {videos.map((video) => (
+                      <div key={video.id} className="flex items-center justify-between p-2 border rounded-lg">
+                        <div className="flex items-center space-x-2">
+                          <div className="w-12 h-12 relative rounded overflow-hidden">
+                            <video
+                              src={video.url}
+                              className="object-cover w-full h-full"
+                              preload="metadata"
+                            />
+                          </div>
+                          <div className="truncate">
+                            <p className="font-medium truncate">{video.title}</p>
+                            <p className="text-sm text-gray-500">
+                              {new Date(video.created_at).toLocaleDateString('ja-JP')}
+                            </p>
+                          </div>
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          onClick={() => router.push(`/dashboard/categories/${category?.id}/videos/${video.id}/edit`)}
+                        >
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ))}
+                    {videos.length === 0 && (
+                      <div className="text-center py-4 text-gray-500">
+                        動画がありません
+                      </div>
+                    )}
+                  </div>
+                )}
               </CardContent>
             </Card>
           </div>
@@ -938,96 +951,83 @@ export default function CategoryDetailPage() {
 
         {/* メインコンテンツ */}
         <div className="flex-1 px-4 transition-all duration-300 ease-in-out">
-          <Card>
-            <CardHeader>
-              <CardTitle>メディア一覧</CardTitle>
-              <CardDescription>
-                このカテゴリーに含まれるメディアを表示しています
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Tabs defaultValue="images" className="space-y-4">
-                <TabsList className="grid w-full grid-cols-2">
-                  <TabsTrigger value="images" className="flex items-center gap-2">
-                    <ImageIcon className="h-4 w-4" />
-                    画像
-                  </TabsTrigger>
-                  <TabsTrigger value="videos" className="flex items-center gap-2">
-                    <VideoIcon className="h-4 w-4" />
-                    動画
-                  </TabsTrigger>
-                </TabsList>
-
-                <TabsContent value="images">
-                  {images.length === 0 ? (
-                    <div className="text-center py-8">
-                      <p className="text-muted-foreground">このカテゴリーにはまだ画像がありません</p>
+          <Card className="mt-4">
+            <CardContent className="pt-6">
+              {category.media_type === 'image' ? (
+                images.length === 0 ? (
+                  <div className="text-center py-8">
+                    <div className="mb-4">
+                      <ImageIcon className="h-12 w-12 mx-auto text-gray-400" />
                     </div>
-                  ) : (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                      {images.map((image) => (
-                        <div
-                          key={image.id}
-                          className="group relative aspect-square overflow-hidden rounded-lg border bg-muted cursor-pointer"
-                          onClick={() => handleImageClick(image)}
-                        >
-                          <Image
-                            src={image.url}
-                            alt={image.title}
-                            fill
-                            className="object-cover transition-transform group-hover:scale-105"
-                            sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
-                          />
-                          <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/60 to-transparent p-4">
-                            <p className="text-sm font-medium text-white">
-                              {image.title}
-                            </p>
-                            <p className="text-xs text-white/80">
-                              {new Date(image.created_at).toLocaleDateString('ja-JP')}
-                            </p>
-                          </div>
+                    <h3 className="text-lg font-medium text-gray-900 mb-2">画像が登録されていません</h3>
+                    <p className="text-gray-500">左メニューから画像を登録してください</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {images.map((image) => (
+                      <div
+                        key={image.id}
+                        className="group relative aspect-square overflow-hidden rounded-lg border bg-muted cursor-pointer"
+                        onClick={() => handleImageClick(image)}
+                      >
+                        <Image
+                          src={image.url}
+                          alt={image.title}
+                          fill
+                          className="object-cover transition-transform group-hover:scale-105"
+                          sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+                        />
+                        <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/60 to-transparent p-4">
+                          <p className="text-sm font-medium text-white">
+                            {image.title}
+                          </p>
+                          <p className="text-xs text-white/80">
+                            {new Date(image.created_at).toLocaleDateString('ja-JP')}
+                          </p>
                         </div>
-                      ))}
+                      </div>
+                    ))}
+                  </div>
+                )
+              ) : (
+                videos.length === 0 ? (
+                  <div className="text-center py-8">
+                    <div className="mb-4">
+                      <VideoIcon className="h-12 w-12 mx-auto text-gray-400" />
                     </div>
-                  )}
-                </TabsContent>
-
-                <TabsContent value="videos">
-                  {videos.length === 0 ? (
-                    <div className="text-center py-8">
-                      <p className="text-muted-foreground">このカテゴリーにはまだ動画がありません</p>
-                    </div>
-                  ) : (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                      {videos.map((video) => (
-                        <div
-                          key={video.id}
-                          className="group relative aspect-square overflow-hidden rounded-lg border bg-muted cursor-pointer"
-                          onClick={() => handleVideoClick(video)}
-                        >
-                          <Image
-                            src={`https://res.cloudinary.com/${process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME}/video/upload/so_1/${video.public_id}.jpg`}
-                            alt={video.title}
-                            fill
-                            className="object-cover transition-transform group-hover:scale-105"
-                          />
-                          <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/60 to-transparent p-4">
-                            <p className="text-sm font-medium text-white">
-                              {video.title}
-                            </p>
-                            <p className="text-xs text-white/80">
-                              {new Date(video.created_at).toLocaleDateString('ja-JP')}
-                            </p>
-                          </div>
-                          <div className="absolute top-2 right-2 bg-black/50 rounded-full p-2">
-                            <VideoIcon className="h-4 w-4 text-white" />
-                          </div>
+                    <h3 className="text-lg font-medium text-gray-900 mb-2">動画が登録されていません</h3>
+                    <p className="text-gray-500">左メニューから動画を登録してください</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {videos.map((video) => (
+                      <div
+                        key={video.id}
+                        className="group relative aspect-square overflow-hidden rounded-lg border bg-muted cursor-pointer"
+                        onClick={() => handleVideoClick(video)}
+                      >
+                        <Image
+                          src={`https://res.cloudinary.com/${process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME}/video/upload/so_1/${video.public_id}.jpg`}
+                          alt={video.title}
+                          fill
+                          className="object-cover transition-transform group-hover:scale-105"
+                        />
+                        <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/60 to-transparent p-4">
+                          <p className="text-sm font-medium text-white">
+                            {video.title}
+                          </p>
+                          <p className="text-xs text-white/80">
+                            {new Date(video.created_at).toLocaleDateString('ja-JP')}
+                          </p>
                         </div>
-                      ))}
-                    </div>
-                  )}
-                </TabsContent>
-              </Tabs>
+                        <div className="absolute top-2 right-2 bg-black/50 rounded-full p-2">
+                          <VideoIcon className="h-4 w-4 text-white" />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )
+              )}
             </CardContent>
           </Card>
         </div>
@@ -1087,16 +1087,22 @@ export default function CategoryDetailPage() {
           <DialogHeader>
             <DialogTitle>カテゴリーの削除</DialogTitle>
             <DialogDescription>
-              このカテゴリーを削除すると、含まれる全ての画像も削除されます。
-              この操作は取り消すことができません。
+              {category.media_type === 'image' ? (
+                <>このカテゴリーを削除すると、含まれる全ての画像も削除されます。この操作は取り消すことができません。</>
+              ) : (
+                <>このカテゴリーを削除すると、含まれる全ての動画も削除されます。この操作は取り消すことができません。</>
+              )}
             </DialogDescription>
           </DialogHeader>
           <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 my-4">
             <div className="flex">
               <div className="ml-3">
                 <p className="text-sm text-yellow-700">
-                  このカテゴリーには{images.length}枚の画像が含まれています。
-                  全ての画像が完全に削除されます。
+                  {category.media_type === 'image' ? (
+                    <>このカテゴリーには{images.length}枚の画像が含まれています。全ての画像が完全に削除されます。</>
+                  ) : (
+                    <>このカテゴリーには{videos.length}本の動画が含まれています。全ての動画が完全に削除されます。</>
+                  )}
                 </p>
               </div>
             </div>

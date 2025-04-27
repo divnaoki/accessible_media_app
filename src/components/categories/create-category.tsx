@@ -15,8 +15,9 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { FolderPlus, Plus } from "lucide-react";
+import { FolderPlus, Plus, ImageIcon, VideoIcon } from "lucide-react";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 
 interface CreateCategoryProps {
   onCategoryCreated?: () => void;
@@ -26,6 +27,7 @@ export function CreateCategory({ onCategoryCreated }: CreateCategoryProps) {
   const [open, setOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [mediaType, setMediaType] = useState<'image' | 'video'>('image');
   const router = useRouter();
   const supabase = createClientComponentClient();
 
@@ -50,6 +52,7 @@ export function CreateCategory({ onCategoryCreated }: CreateCategoryProps) {
           user_id: user.id,
           name,
           description,
+          media_type: mediaType,
           display_order: 0,
         });
 
@@ -108,6 +111,29 @@ export function CreateCategory({ onCategoryCreated }: CreateCategoryProps) {
                 placeholder="カテゴリーの説明を入力"
                 rows={3}
               />
+            </div>
+            <div className="space-y-2">
+              <Label>メディアタイプ</Label>
+              <RadioGroup
+                value={mediaType}
+                onValueChange={(value) => setMediaType(value as 'image' | 'video')}
+                className="flex gap-4"
+              >
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="image" id="image" />
+                  <Label htmlFor="image" className="flex items-center gap-2">
+                    <ImageIcon className="h-4 w-4" />
+                    画像
+                  </Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="video" id="video" />
+                  <Label htmlFor="video" className="flex items-center gap-2">
+                    <VideoIcon className="h-4 w-4" />
+                    動画
+                  </Label>
+                </div>
+              </RadioGroup>
             </div>
           </div>
 
