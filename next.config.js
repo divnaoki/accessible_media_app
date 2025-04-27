@@ -17,6 +17,7 @@ const nextConfig = {
         'accessible-media-app-div-naokis-projects.vercel.app', // プレビュー環境用
         'accessible-media-app-git-main-div-naokis-projects.vercel.app', // デプロイ環境用
       ],
+      bodySizeLimit: '100mb',
     },
   },
 };

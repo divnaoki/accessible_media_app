@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { v2 as cloudinary } from 'cloudinary';
 
+// サーバー側でのみCloudinaryの設定を行う
 cloudinary.config({
   cloud_name: process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME,
   api_key: process.env.NEXT_PUBLIC_CLOUDINARY_API_KEY,
@@ -11,8 +12,7 @@ export async function POST(request: Request) {
   try {
     const formData = await request.formData();
     const file = formData.get('file') as File;
-    const uploadPreset = formData.get('upload_preset') as string;
-
+    
     if (!file) {
       return NextResponse.json(
         { error: 'ファイルが指定されていません' },
@@ -23,12 +23,12 @@ export async function POST(request: Request) {
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
+    // サーバー側でCloudinaryのAPIを呼び出し
     const result = await new Promise((resolve, reject) => {
       cloudinary.uploader
         .upload_stream(
           {
             resource_type: 'video',
-            upload_preset: uploadPreset,
           },
           (error, result) => {
             if (error) {
